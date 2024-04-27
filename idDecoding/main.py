@@ -67,19 +67,22 @@ def decodeWithLCIO(id0: int, id1: int) -> dict[str, int]:
 
 
 def decodeByHand(id0: int, id1: int) -> dict[str, int]:
+    def mask(nbits):
+        """ e.g. mask(4) returns 0b1111 """
+        return (1 << nbits) - 1
     d = {}
-    d["system"] = id0 & ((1 << 5) - 1)
-    d["side"] = twos_complement((id0 >> 5) & ((1 << 2) - 1), 2)
-    d["module"] = (id0 >> 7) & ((1 << 8) - 1)
-    d["stave"] = (id0 >> 15) & ((1 << 4) - 1)
-    d["layer"] = (id0 >> 19) & ((1 << 9) - 1)
-    d["submodule"] = (id0 >> 28) & ((1 << 4) - 1)
-    d["x"] = twos_complement(id1 & 0xff, 16)
-    d["y"] = twos_complement(id1 >> 16, 16)
+    d["system"]    = id0 & mask(5)
+    d["side"]      = twos_complement((id0 >> 5) & mask(2), 2)
+    d["module"]    = (id0 >> 7) & mask(8)
+    d["stave"]     = (id0 >> 15) & mask(4)
+    d["layer"]     = (id0 >> 19) & mask(9)
+    d["submodule"] = (id0 >> 28) & mask(4)
+    d["x"]         = twos_complement(id1 & 0xff, 16)
+    d["y"]         = twos_complement(id1 >> 16, 16)
     return d
 
 
-def twos_complement(val, bits):
+def twos_complement(val: int, bits: int) -> int:
     """ https://stackoverflow.com/questions/1604464/twos-complement-in-python """
     if (val & (1 << (bits - 1))) != 0: # if sign bit is set e.g., 8bit: 128-255
         val = val - (1 << bits)        # compute negative value
