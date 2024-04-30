@@ -1,5 +1,7 @@
 # muoncollider
 
+Heavily influenced by https://github.com/trholmes/mucolstudies.
+
 Running the apptainer container:
 
 ```
