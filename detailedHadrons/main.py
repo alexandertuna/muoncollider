@@ -36,7 +36,8 @@ print(f"hcal_sampling_scaling_e = {hcal_sampling_scaling_e}")
 append = "tmp" # time.strftime("%Y_%m_%d_%Hh%Mm%Ss")
 
 # Set up hit encoder/decoder
-encoding = 'system:0:5,side:5:-2,module:7:8,stave:15:4,layer:19:9,submodule:28:4,x:32:-16,y:48:-16' # col.getParameters().getStringVal(EVENT.LCIO.CellIDEncoding)
+# encoding = col.getParameters().getStringVal(EVENT.LCIO.CellIDEncoding)
+encoding = 'system:0:5,side:5:-2,module:7:8,stave:15:4,layer:19:9,submodule:28:4,x:32:-16,y:48:-16'
 decoder = UTIL.BitField64(encoding)
 
 @dataclass(frozen=True)
