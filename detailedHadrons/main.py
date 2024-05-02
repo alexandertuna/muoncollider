@@ -3,8 +3,6 @@ from pyLCIO import EVENT, UTIL
 
 import argparse
 import glob
-import collections
-import ctypes
 import math
 import time
 from dataclasses import dataclass
@@ -104,7 +102,7 @@ class particleReconstructed:
     dig_e: float
     clu_e: float
     pfo_e: float
-    mcp_n: int
+    tru_n: int
     sim_n: int
     dig_n: int
     rec_n: int
@@ -265,44 +263,36 @@ class DetailedHadronStudy:
                 # Get the collections we care about
                 mcpCollection = getCollection(event, "MCParticle")
 
-                # Make counter variables
-                mcp_n = 0
-                clu_n = 0
-                pfo_n = 0
-                my_pfo_ob = None
-                my_clu_ob = None
-                my_mcp_ob = None
-
                 # Make particle object
                 particleTrue = None
 
                 # Loop over the truth objects and fill histograms
-                tru_E = 0
+                tru_e, tru_n = 0, 0
                 for mcp in mcpCollection:
                     p, e = mcp.getMomentum(), mcp.getEnergy()
                     if all([abs(mcp.getPDG()) in settings['pdgid'][self.obj_type],
                             mcp.getGeneratorStatus()==1,
                             abs(eta(p[0], p[1], p[2])) < 2.0,
                         ]):
-                        mcp_n += 1
+                        tru_n += 1
                         p, e = mcp.getMomentum(), mcp.getEnergy()
                         particleTrue = particleFromTheGun(p[0], p[1], p[2], e)
-                        tru_E = e
+                        tru_e = e
 
                 # If there's no good truth reference, move on
                 if particleTrue is None:
                     continue
 
                 # If there are too many truth references, get confused
-                if mcp_n > 1:
-                    raise Exception(f"Foudn too many mcp references ({mcp_n})")
+                if tru_n > 1:
+                    raise Exception(f"Found too many mcp references ({tru_n})")
 
                 # Loop over digi hits and sum
-                sim_E = getEnergySim(event)
-                dig_E = getEnergyDig(event)
-                rec_E = getEnergyRec(event)
-                clu_E = getEnergyClu(event)
-                pfo_E = getEnergyPfo(event, self.obj_type)
+                sim_e = getEnergySim(event)
+                dig_e = getEnergyDig(event)
+                rec_e = getEnergyRec(event)
+                clu_e, clu_n = getEnergyAndNumberClu(event)
+                pfo_e, pfo_n = getEnergyAndNumberPfo(event, self.obj_type)
 
                 # Count number of items
                 def countElements(event, collection_names):
@@ -326,14 +316,14 @@ class DetailedHadronStudy:
                     tru_eta,
                     tru_phi,
 
-                    tru_E,
-                    sim_E,
-                    rec_E,
-                    dig_E,
-                    clu_E,
-                    pfo_E,
+                    tru_e,
+                    sim_e,
+                    rec_e,
+                    dig_e,
+                    clu_e,
+                    pfo_e,
 
-                    mcp_n,
+                    tru_n,
                     sim_n,
                     dig_n,
                     rec_n,
@@ -411,22 +401,24 @@ def getEnergyRec(event):
             energy += rec.getEnergy()
     return energy
 
-def getEnergyClu(event):
-    energy = 0
+def getEnergyAndNumberClu(event):
+    energy, num = 0, 0
     cluCollection = getCollection(event, "PandoraClusters")
     for clu in cluCollection:
+        num += 1
         if clu.getEnergy() > energy:
             energy = clu.getEnergy()
-    return energy
+    return energy, num
 
-def getEnergyPfo(event, obj_type):
-    energy = 0
+def getEnergyAndNumberPfo(event, obj_type):
+    energy, num = 0, 0
     pfos = getCollection(event, "PandoraPFOs")
     for pfo in pfos:
         if abs(pfo.getType()) in settings['pdgid'][obj_type]:
+            num += 1
             if pfo.getEnergy() > energy:
                 energy = pfo.getEnergy()
-    return energy
+    return energy, num
 
 if __name__ == "__main__":
     main()
