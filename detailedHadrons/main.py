@@ -190,6 +190,7 @@ class DetailedHadronStudy:
                 ax.tick_params(top=True, right=True)
                 cbar = fig.colorbar(im, ax=ax)
                 cbar.set_label("Number of entries")
+                fig.subplots_adjust(bottom=0.14, left=0.15, right=0.95, top=0.95)
                 pdf.savefig()
 
 
