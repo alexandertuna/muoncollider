@@ -28,10 +28,11 @@ decoder = UTIL.BitField64(encoding)
 
 # Command-line options
 def options() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(usage=__doc__,
-                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("-i", help="Particle type to analyze", choices=["ne", "pi"], default="ne")
-    parser.add_argument("-n", help="Maximum number of events to analyze")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-i", help="Particle type to analyze (default: %(default)s)", choices=["ne", "pi"], default="ne")
+    parser.add_argument("-n", help="Maximum number of events to analyze", default=0, type=int)
+    parser.add_argument("-p", help="Parquet file to read and/or write (default: %(default)s)", default="detailedHadrons.parquet")
+    parser.add_argument("-l", help="Load parquet file instead of lcio", action="store_true")
     return parser.parse_args()
 
 @dataclass(frozen=True)
@@ -108,29 +109,16 @@ class particleReconstructed:
     clu_n: int
     pfo_n: int
 
+
 # Set up things for each object
 settings = {
-        "fnames": { "ne": "/data/fmeloni/DataMuC_MuColl10_v0A/v2/reco/neutronGun_E_250_1000*"
-                },
-        "labelname": { "ne": "Neutron",
-                    },
-        "plotdir":{ "ne": "neutrons",
-                },
-        "pdgid":  { "ne": [2112],
-                    "pi": [211, 111],
-                },
-        "mass":   { "ne": 0.940,
-                    "pi": 0.135,
-                },
+    "fnames": { "ne": "/data/fmeloni/DataMuC_MuColl10_v0A/v2/reco/neutronGun_E_250_1000*"
+            },
+    "pdgid":  { "ne": [2112],
+                "pi": [211, 111],
+            },
 }
 
-def filenames(obj_type: str) -> List[str]:
-    samples = glob.glob(settings["fnames"][obj_type])
-    fnames = []
-    for s in samples:
-        fnames += glob.glob(f"{s}/*.slcio")
-    print("Found %i files."%len(fnames))
-    return fnames
 
 # Define good particle
 def isGood(tlv):
@@ -146,7 +134,192 @@ def progress(time_diff, nprocessed, ntotal):
     msg = msg % (nprocessed, ntotal, 100*nprocessed/ntotal, rate, time_diff/60, (ntotal-nprocessed)/(rate*60))
     print(msg)
 
-# convert hcal digit energy to GeV
+def main() -> None:
+    ops = options()
+    study = DetailedHadronStudy(ops.i, ops.p, ops.l, ops.n)
+    study.load_data()
+    if not ops.l:
+        study.write_data()
+    study.plot_energy()
+
+class DetailedHadronStudy:
+
+    def __init__(self, obj_type: str, parquet_name: str, load_parquet: bool, num_events: int) -> None:
+        self.obj_type = obj_type
+        self.parquet_name = parquet_name
+        self.load_parquet = load_parquet
+        self.num_events = num_events
+        self.df = pd.DataFrame()
+        self.mapping = {
+            "sim": "Sim. Calorimeter",
+            "dig": "Digi. Calorimeter",
+            "rec": "Reco. Calorimeter",
+            "clu": "Cluster",
+            "pfo": "Reconstructed PF",
+        }
+
+    def load_data(self) -> None:
+        if self.load_parquet:
+            if self.num_events:
+                print("Ignoring -n option when using -l")
+            self.df = pd.read_parquet(self.parquet_name)
+        else:
+            particles = self.read_lcio()
+            self.df = pd.DataFrame([vars(p) for p in particles])
+        print(self.df)
+
+
+    def write_data(self) -> None:
+        self.df.to_parquet(self.parquet_name)
+
+
+    def plot_energy(self) -> None:
+        print("Plotting energy ... ")
+
+        binsx = binsy = np.arange(0, 1501, 15)
+        linex = liney = [min(binsx), max(binsx)]
+
+        with PdfPages("energy.pdf") as pdf:
+            for source in ["sim", "dig", "rec", "clu", "pfo"]:
+                print(f"Plotting {source} energy ... ")
+                fig, ax = plt.subplots(figsize=(5, 4))
+                counts, xedges, yedges, im = ax.hist2d(self.df.tru_e, self.df[f"{source}_e"], bins=(binsx, binsy), cmap="rainbow", cmin=0.1)
+                ax.plot(linex, liney, color="gray", linewidth=1, linestyle="dashed")
+                ax.set_xlabel("True energy [GeV]")
+                ax.set_ylabel(f"{self.mapping[source]} energy [GeV]")
+                ax.tick_params(top=True, right=True)
+                cbar = fig.colorbar(im, ax=ax)
+                cbar.set_label("Number of entries")
+                pdf.savefig()
+
+
+    def filenames(self) -> List[str]:
+        samples = glob.glob(settings["fnames"][self.obj_type])
+        fnames = []
+        for s in samples:
+            fnames += glob.glob(f"{s}/*.slcio")
+        print("Found %i files." % len(fnames))
+        return fnames
+
+
+    def read_lcio(self) -> List[particleReconstructed]:
+
+        # Announcements
+        if self.num_events > 0:
+            print(f"Running on {self.num_events} events at maximum")
+
+        # Loop over events
+        reader = pyLCIO.IOIMPL.LCFactory.getInstance().createLCReader()
+        i_total = 0
+        t0 = time.time()
+        fnames = self.filenames()
+
+        # List of particles
+        particles = []
+
+        # File loop
+        for i_file, f in enumerate(fnames):
+
+            reader.open(f)
+
+            # Keep track of total events
+            if self.num_events > 0 and i_total >= self.num_events:
+                break
+
+            # Event loop
+            for i_event, event in enumerate(reader):
+
+                # Keep track of total events
+                if self.num_events > 0 and i_total >= self.num_events:
+                    break
+                i_total += 1
+
+                # Get the collections we care about
+                mcpCollection = getCollection(event, "MCParticle")
+
+                # Make counter variables
+                mcp_n = 0
+                clu_n = 0
+                pfo_n = 0
+                my_pfo_ob = None
+                my_clu_ob = None
+                my_mcp_ob = None
+
+                # Make particle object
+                particleTrue = None
+
+                # Loop over the truth objects and fill histograms
+                tru_E = 0
+                for mcp in mcpCollection:
+                    mcp_tlv = getTLV(mcp)
+                    if all([abs(mcp.getPDG()) in settings['pdgid'][self.obj_type],
+                            mcp.getGeneratorStatus()==1,
+                            isGood(mcp_tlv)]):
+                        mcp_n += 1
+                        my_mcp_ob = mcp_tlv
+                        p, e = mcp.getMomentum(), mcp.getEnergy()
+                        particleTrue = particleFromTheGun(p[0], p[1], p[2], e)
+                        tru_E = mcp.getEnergy()
+
+                # If there's no good truth reference, move on
+                if particleTrue is None:
+                    continue
+
+                # If there are too many truth references, get confused
+                if mcp_n > 1:
+                    raise Exception(f"Foudn too many mcp references ({mcp_n})")
+
+                # Loop over digi hits and sum
+                sim_E = getEnergySim(event)
+                dig_E = getEnergyDig(event)
+                rec_E = getEnergyRec(event)
+                clu_E = getEnergyClu(event)
+                pfo_E = getEnergyPfo(event, self.obj_type)
+
+                # Count number of items
+                def countElements(event, collection_names):
+                    return sum([len(getCollection(event, name)) for name in collection_names])
+                sim_n = countElements(event, ["ECalBarrelCollection",
+                                              "ECalEndcapCollection",
+                                              "HCalBarrelCollection",
+                                              "HCalEndcapCollection"])
+                dig_n = countElements(event, ["EcalBarrelCollectionDigi",
+                                              "EcalEndcapCollectionDigi",
+                                              "HcalBarrelCollectionDigi",
+                                              "HcalEndcapCollectionDigi"])
+                rec_n = countElements(event, ["EcalBarrelCollectionRec",
+                                              "EcalEndcapCollectionRec",
+                                              "HcalBarrelCollectionRec",
+                                              "HcalEndcapCollectionRec"])
+
+                # Create a summary
+                tru_eta, tru_phi = particleTrue.eta, particleTrue.phi
+                particleSummary = particleReconstructed(
+                    tru_eta,
+                    tru_phi,
+
+                    tru_E,
+                    sim_E,
+                    rec_E,
+                    dig_E,
+                    clu_E,
+                    pfo_E,
+
+                    mcp_n,
+                    sim_n,
+                    dig_n,
+                    rec_n,
+                    clu_n,
+                    pfo_n,
+                )
+                particles.append(particleSummary)
+
+            # Bookkeeping
+            progress(time.time() - t0, i_file + 1, len(fnames))
+            reader.close()
+
+        return particles
+
 def reconstructHcalEnergy(hit):
     decoder.setValue((hit.getCellID0() & 0xffffffff) |
                      (hit.getCellID1() << 32))
@@ -163,273 +336,6 @@ def reconstructHcalEnergy(hit):
     energy /= ppd.mipPe
     energy *= calibrCoeff
     return energy
-
-def main():
-    particles = readLcio()
-    df = pd.DataFrame([vars(p) for p in particles])
-    print(df)
-    plotEnergy(df)
-
-def plotEnergy(df: pd.DataFrame) -> None:
-    print("Plotting energy ... ")
-    binsx = np.arange(0, 1501, 15)
-    binsy = np.arange(0, 1501, 15)
-    linex = liney = [min(binsx), max(binsx)]
-    with PdfPages("energy.pdf") as pdf:
-        for source in ["sim", "dig", "rec", "clu", "pfo"]:
-            print(f"Plotting {source} energy ... ")
-            # fig, ax = plt.subplots(constrained_layout=True, figsize=(5, 4))
-            fig, ax = plt.subplots(figsize=(5, 4))
-            counts, xedges, yedges, im = ax.hist2d(df.tru_e, df[f"{source}_e"], bins=(binsx, binsy), cmap="rainbow", cmin=0.1)
-            ax.plot(linex, liney, color="gray", linewidth=1, linestyle="dashed")
-            ax.set_xlabel("True energy [GeV]")
-            ax.set_ylabel(f"{source} energy [GeV]")
-            ax.tick_params(top=True, right=True)
-            cbar = fig.colorbar(im, ax=ax)
-            cbar.set_label("Number of entries")
-            pdf.savefig()
-
-def readLcio() -> List[particleReconstructed]:
-
-    # Command-line args
-    ops = options()
-    obj_type = ops.i
-    max_events = int(ops.n) if ops.n else ops.n
-
-    # Announcements
-    print(f"Running on {settings['labelname'][obj_type]}")
-    if max_events is not None:
-        print(f"Running on {max_events} events at maximum")
-
-    # ############## CREATE EMPTY HISTOGRAM OBJECTS  #############################
-    # Set up histograms
-    # This is an algorithmic way of making a bunch of histograms and storing them in a dictionary
-    variables = {}
-    #variables["pt"] =  {"nbins": 30, "xmin": 0, "xmax": 3000,   "title": "p_{T} [GeV]"}
-    variables["E"] =   {"nbins": 50, "xmin": 0, "xmax": 1000,   "title": "E [GeV]"}
-    #variables["eta"] = {"nbins": 30, "xmin": -3, "xmax": 3,     "title": "#eta"}
-    #variables["phi"] = {"nbins": 30, "xmin": -3.5, "xmax": 3.5, "title": "#phi"}
-    #variables["n"] =   {"nbins": 20, "xmin": 0, "xmax": 20,     "title": "n"}
-    hists = {}
-
-    objects = {}
-    objects["mcp"] = f"True {settings['labelname'][obj_type]}"
-    objects["sim"] = "Sim Calorimeter"
-    objects["dig"] = "Digi Calorimeter"
-    objects["rec"] = "Reco Calorimeter"
-    objects["clu"] = "Matched Cluster"
-    objects["pfo"] = f"Reconstructed {settings['labelname'][obj_type]}"
-
-    for obj in objects:
-        for var in variables:
-            hists[obj+"_"+var] = ROOT.TH1F(obj+"_"+var, objects[obj],
-                                           variables[var]["nbins"],
-                                           variables[var]["xmin"],
-                                           variables[var]["xmax"])
-
-    ranges = ["_0to1p1", "_1p1to1p2", "_1p2to2"]
-
-    # Initialize all the 2D histograms: the each of the above variables at each level vs the mcp value
-    hists2d = {}
-    for obj in objects:
-        for var in variables:
-            if obj == "mcp": continue
-            for r in ranges:
-                hists2d[obj+"_v_mcp_"+var+r] = ROOT.TH2F(obj+"_v_mcp_"+var+r,
-                                                         obj+"_v_mcp_"+var+r,
-                                                         variables[var]["nbins"],
-                                                         variables[var]["xmin"],
-                                                         variables[var]["xmax"],
-                                                         variables[var]["nbins"],
-                                                         variables[var]["xmin"],
-                                                         variables[var]["xmax"])
-
-
-    # ############## LOOP OVER EVENTS AND FILL HISTOGRAMS  #############################
-    # Loop over events
-    reader = pyLCIO.IOIMPL.LCFactory.getInstance().createLCReader()
-    # reader.setReadCollectionNames(["MCParticle", "PandoraPFOs", "ECalBarrelCollection", "ECalEndcapCollection", "EcalBarrelCollectionDigi", "EcalEndcapCollectionDigi", "EcalBarrelCollectionRec", "EcalEndcapCollectionRec", "PandoraClusters"])
-    i_total = 0
-    t0 = time.time()
-    fnames = filenames(obj_type)
-    n_clu_ob_dict = collections.defaultdict(int)
-    n_pfo_ob_dict = collections.defaultdict(int)
-
-    # List of particles
-    particles = []
-
-    # File loop
-    for i_file, f in enumerate(fnames):
-
-        reader.open(f)
-
-        # Keep track of total events
-        if max_events is not None and i_total >= max_events:
-            break
-
-        # Event loop
-        for i_event, event in enumerate(reader):
-
-            # Keep track of total events
-            if max_events is not None and i_total >= max_events:
-                break
-            i_total += 1
-
-            # Get the collections we care about
-            mcpCollection = getCollection(event, "MCParticle")
-            simCollection_b = getCollection(event, "ECalBarrelCollection")
-            simCollection_e = getCollection(event, "ECalEndcapCollection")
-            hcalSimCollection_b = getCollection(event, "HCalBarrelCollection")
-            hcalSimCollection_e = getCollection(event, "HCalEndcapCollection")
-            yokeSimCollection_b = getCollection(event, "YokeBarrelCollection")
-            yokeSimCollection_e = getCollection(event, "YokeEndcapCollection")
-            digCollection_b = getCollection(event, "EcalBarrelCollectionDigi")
-            digCollection_e = getCollection(event, "EcalEndcapCollectionDigi")
-            recCollection_b = getCollection(event, "EcalBarrelCollectionRec")
-            recCollection_e = getCollection(event, "EcalEndcapCollectionRec")
-            hcalDigCollection_b = getCollection(event, "HcalBarrelCollectionDigi")
-            hcalDigCollection_e = getCollection(event, "HcalEndcapCollectionDigi")
-            hcalRecCollection_b = getCollection(event, "HcalBarrelCollectionRec")
-            hcalRecCollection_e = getCollection(event, "HcalEndcapCollectionRec")
-            cluCollection = getCollection(event, "PandoraClusters")
-            pfoCollection = getCollection(event, "PandoraPFOs")
-
-            # Make counter variables
-            n_mcp_ob = 0
-            sim_n = 0
-            dig_n = 0
-            rec_n = 0
-            n_pfo_ob = 0
-            n_clu_ob = 0
-            has_pfo_ob = False
-            has_clu_ob = False
-            my_pfo_ob = None
-            my_clu_ob = None
-            my_mcp_ob = None
-
-            # Make particle object
-            particleTrue = None
-
-            # Loop over the truth objects and fill histograms
-            tru_E = 0
-            for mcp in mcpCollection:
-                mcp_tlv = getTLV(mcp)
-                if all([abs(mcp.getPDG()) in settings['pdgid'][obj_type],
-                        mcp.getGeneratorStatus()==1,
-                        isGood(mcp_tlv)]):
-                    n_mcp_ob += 1
-                    my_mcp_ob = mcp_tlv
-                    p, e = mcp.getMomentum(), mcp.getEnergy()
-                    particleTrue = particleFromTheGun(p[0], p[1], p[2], e)
-                    tru_E = mcp.getEnergy()
-
-            # If there's no good truth reference, move on
-            if particleTrue is None:
-                continue
-
-            # If there are too many truth references, get confused
-            if n_mcp_ob > 1:
-                raise Exception(f"Foudn too many mcp references ({n_mcp_ob})")
-
-            # Loop over digi hits and sum
-            sim_E = getEnergySim(event)
-            dig_E = getEnergyDig(event)
-            rec_E = getEnergyRec(event)
-            clu_E = getEnergyClu(event)
-            pfo_E = getEnergyPfo(event, obj_type)
-
-            # Count number of items
-            def countElements(event, collection_names):
-                return sum([len(getCollection(event, name)) for name in collection_names])
-            sim_n = countElements(event, ["ECalBarrelCollection", "ECalEndcapCollection", "HCalBarrelCollection", "HCalEndcapCollection"])
-            dig_n = countElements(event, ["EcalBarrelCollectionDigi", "EcalEndcapCollectionDigi", "HcalBarrelCollectionDigi", "HcalEndcapCollectionDigi"])
-            rec_n = countElements(event, ["EcalBarrelCollectionRec", "EcalEndcapCollectionRec", "HcalBarrelCollectionRec", "HcalEndcapCollectionRec"])
-
-            # Create a summary
-            tru_eta, tru_phi = particleTrue.eta, particleTrue.phi
-            particleSummary = particleReconstructed(
-                tru_eta,
-                tru_phi,
-
-                tru_E,
-                sim_E,
-                rec_E,
-                dig_E,
-                clu_E,
-                pfo_E,
-
-                n_mcp_ob,
-                sim_n,
-                dig_n,
-                rec_n,
-                n_clu_ob,
-                n_pfo_ob,
-            )
-            particles.append(particleSummary)
-
-            # Only make plots for events with isGood mcps
-            if particleTrue is not None:
-                n_clu_ob_dict[n_clu_ob] += 1
-                n_pfo_ob_dict[n_pfo_ob] += 1
-                hists["mcp_E"].Fill(my_mcp_ob.E())
-                if has_pfo_ob:
-                    hists["pfo_E"].Fill(my_pfo_ob.E())
-                if has_clu_ob:
-                    hists["clu_E"].Fill(my_clu_ob.getEnergy())
-                hists["sim_E"].Fill(sim_E)
-                hists["dig_E"].Fill(dig_E)
-                hists["rec_E"].Fill(rec_E)
-
-                # Print out 2D distributions per eta range
-                for r in ranges:
-                    r1 = r.replace("p", ".").strip("_")
-                    low_eta = r1.split("to")[0]
-                    high_eta = r1.split("to")[1]
-                    selection_string = f"my_mcp_ob.Eta()>={low_eta} and my_mcp_ob.Eta()<{high_eta}"
-                    if eval(selection_string):
-                        if has_pfo_ob:
-                            hists2d["pfo_v_mcp_E"+r].Fill(my_mcp_ob.E(), my_pfo_ob.E())
-                        if has_clu_ob:
-                            hists2d["clu_v_mcp_E"+r].Fill(my_mcp_ob.E(), my_clu_ob.getEnergy())
-                        hists2d["sim_v_mcp_E"+r].Fill(my_mcp_ob.E(), sim_E)
-                        hists2d["dig_v_mcp_E"+r].Fill(my_mcp_ob.E(), dig_E)
-                        hists2d["rec_v_mcp_E"+r].Fill(my_mcp_ob.E(), rec_E)
-
-        # Bookkeeping
-        progress(time.time() - t0, i_file + 1, len(fnames))
-        reader.close()
-
-
-    # mention cluster and PFO multiplicity
-    total = sum(n_clu_ob_dict.values())
-    print(f"Total events = {total}")
-    # for n_clu_ob, n_occurences in sorted(n_clu_ob_dict.items()):
-    #     print(f"N(clu) = {n_clu_ob} occurred {n_occurences}x ({n_occurences/total * 100:.1f}%)")
-    # for n_pfo_ob, n_occurences in sorted(n_pfo_ob_dict.items()):
-    #     print(f"N(pfo) = {n_pfo_ob} occurred {n_occurences}x ({n_occurences/total * 100:.1f}%)")
-
-    # ############## MANIPULATE, PRETTIFY, AND SAVE HISTOGRAMS #############################
-
-    # Draw basic distributions
-    for var in variables:
-        h_to_plot = {}
-        for obj in objects:
-            h_to_plot[obj] = hists[obj+"_"+var]
-        plotHistograms(h_to_plot, f"plots/calo/comp_{var}.png", variables[var]["title"], "Count")
-
-    # Make 2D plots comparing true v reco quantities
-    for hist in hists2d:
-        c = ROOT.TCanvas("c_%s"%hist, "c")
-        hists2d[hist].Draw("colz")
-        var = hist.split("_")[-2]
-        obj = hist.split("_")[0]
-        hists2d[hist].GetXaxis().SetTitle("True "+settings['labelname'][obj_type]+" "+variables[var]["title"])
-        hists2d[hist].GetYaxis().SetTitle(objects[obj]+" "+variables[var]["title"])
-        c.SetRightMargin(0.18)
-        c.SetLogz()
-        c.SaveAs(f"plots/calo/{hist}.png")
-
-    return particles
 
 def getCollection(event, name):
     if name in event.getCollectionNames():
