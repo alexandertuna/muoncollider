@@ -12,6 +12,10 @@ from typing import List
 
 import numpy as np
 import pandas as pd
+import matplotlib as mpl
+mpl.use('Agg')
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
 
 exec(open("./plotHelper.py").read())
 ROOT.gROOT.SetBatch()
@@ -164,9 +168,28 @@ def main():
     particles = readLcio()
     df = pd.DataFrame([vars(p) for p in particles])
     print(df)
+    plotEnergy(df)
 
+def plotEnergy(df: pd.DataFrame) -> None:
+    print("Plotting energy ... ")
+    binsx = np.arange(0, 1501, 15)
+    binsy = np.arange(0, 1501, 15)
+    linex = liney = [min(binsx), max(binsx)]
+    with PdfPages("energy.pdf") as pdf:
+        for source in ["sim", "dig", "rec", "clu", "pfo"]:
+            print(f"Plotting {source} energy ... ")
+            # fig, ax = plt.subplots(constrained_layout=True, figsize=(5, 4))
+            fig, ax = plt.subplots(figsize=(5, 4))
+            counts, xedges, yedges, im = ax.hist2d(df.tru_e, df[f"{source}_e"], bins=(binsx, binsy), cmap="rainbow", cmin=0.1)
+            ax.plot(linex, liney, color="gray", linewidth=1, linestyle="dashed")
+            ax.set_xlabel("True energy [GeV]")
+            ax.set_ylabel(f"{source} energy [GeV]")
+            ax.tick_params(top=True, right=True)
+            cbar = fig.colorbar(im, ax=ax)
+            cbar.set_label("Number of entries")
+            pdf.savefig()
 
-def readLcio():
+def readLcio() -> List[particleReconstructed]:
 
     # Command-line args
     ops = options()
