@@ -17,6 +17,12 @@ mpl.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
+ETAS = [
+    (0.0, 1.1),
+    (1.1, 1.2),
+    (1.2, 2.0),
+]
+
 # Set up hit encoder/decoder
 # encoding = col.getParameters().getStringVal(EVENT.LCIO.CellIDEncoding)
 encoding = "system:0:5,side:5:-2,module:7:8,stave:15:4,layer:19:9,submodule:28:4,x:32:-16,y:48:-16"
@@ -193,19 +199,26 @@ class DetailedHadronStudy:
 
         with PdfPages("energy.pdf") as pdf:
             for source in ["sim", "dig", "rec", "clu", "pfo"]:
-                print(f"Plotting {source} energy ... ")
-                fig, ax = plt.subplots(figsize=(5, 4))
-                counts, xedges, yedges, im = ax.hist2d(self.df.tru_e, self.df[f"{source}_e"], bins=(binsx, binsy), cmap="rainbow", cmin=0.1)
-                ax.plot(linex, liney, color="gray", linewidth=1, linestyle="dashed")
-                ax.set_xlabel("True energy [GeV]")
-                ax.set_ylabel(f"{self.mapping[source]} energy [GeV]")
-                ax.tick_params(top=True, right=True)
-                for it, (label, value) in enumerate(self.constants[source].items()):
-                    ax.text(0.05, 0.95 - it*0.04, f"{label} = {value}", transform=ax.transAxes, fontsize=6, color="gray")
-                cbar = fig.colorbar(im, ax=ax)
-                cbar.set_label("Number of entries")
-                fig.subplots_adjust(bottom=0.14, left=0.15, right=0.95, top=0.95)
-                pdf.savefig()
+                for eta_min, eta_max in ETAS:
+                    print(f"Plotting {source} energy in eta range {eta_min}, {eta_max} ... ")
+                    fig, ax = plt.subplots(figsize=(5, 4))
+                    condition = (abs(self.df.tru_eta) > eta_min) & (abs(self.df.tru_eta) < eta_max)
+                    counts, xedges, yedges, im = ax.hist2d(self.df.tru_e[condition],
+                                                           self.df[f"{source}_e"][condition],
+                                                           bins=(binsx, binsy),
+                                                           cmap="rainbow",
+                                                           cmin=0.1)
+                    ax.plot(linex, liney, color="gray", linewidth=1, linestyle="dashed")
+                    ax.set_xlabel("True energy [GeV]")
+                    ax.set_ylabel(f"{self.mapping[source]} energy [GeV]")
+                    ax.tick_params(top=True, right=True)
+                    ax.text(0.05, 0.6, f"{eta_min} < |${{\eta}}$| < {eta_max}", transform=ax.transAxes, fontsize=12)
+                    for it, (label, value) in enumerate(self.constants[source].items()):
+                        ax.text(0.05, 0.95 - it*0.04, f"{label} = {value}", transform=ax.transAxes, fontsize=6, color="gray")
+                    cbar = fig.colorbar(im, ax=ax)
+                    cbar.set_label("Number of entries")
+                    fig.subplots_adjust(bottom=0.14, left=0.15, right=0.95, top=0.95)
+                    pdf.savefig()
 
 
     def filenames(self) -> List[str]:
