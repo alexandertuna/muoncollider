@@ -17,10 +17,6 @@ mpl.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
-exec(open("./plotHelper.py").read())
-ROOT.gROOT.SetBatch()
-ROOT.gErrorIgnoreLevel = ROOT.kWarning
-
 # Set up hit encoder/decoder
 # encoding = col.getParameters().getStringVal(EVENT.LCIO.CellIDEncoding)
 encoding = "system:0:5,side:5:-2,module:7:8,stave:15:4,layer:19:9,submodule:28:4,x:32:-16,y:48:-16"
@@ -119,13 +115,6 @@ settings = {
             },
 }
 
-
-# Define good particle
-def isGood(tlv):
-    if abs(tlv.Eta()) < 2:
-        return True
-    return False
-
 # Progress bar
 def progress(time_diff, nprocessed, ntotal):
     nprocessed, ntotal = float(nprocessed), float(ntotal)
@@ -134,6 +123,7 @@ def progress(time_diff, nprocessed, ntotal):
     msg = msg % (nprocessed, ntotal, 100*nprocessed/ntotal, rate, time_diff/60, (ntotal-nprocessed)/(rate*60))
     print(msg)
 
+# Script
 def main() -> None:
     ops = options()
     study = DetailedHadronStudy(ops.i, ops.p, ops.l, ops.n)
@@ -142,6 +132,7 @@ def main() -> None:
         study.write_data()
     study.plot_energy()
 
+# Analysis class
 class DetailedHadronStudy:
 
     def __init__(self, obj_type: str, parquet_name: str, load_parquet: bool, num_events: int) -> None:
@@ -157,6 +148,27 @@ class DetailedHadronStudy:
             "clu": "Cluster",
             "pfo": "Reconstructed PF",
         }
+        self.constants = {
+            "sim": {
+                "mip (ecal)": calib.mip.ecal,
+                "mip (hcal, barrel)": calib.mip.hcal_barrel,
+                "mip (hcal, endcap)": calib.mip.hcal_endcap,
+                "mip->reco (ecal)": calib.mip_to_reco.ecal,
+                "mip->reco (hcal, barrel)": calib.mip_to_reco.hcal_barrel,
+                "mip->reco (hcal, endcap)": calib.mip_to_reco.hcal_endcap,
+            },
+            "dig": {
+                "mip->reco (ecal)": calib.mip_to_reco.ecal,
+                "mip->reco (hcal, barrel)": calib.mip_to_reco.hcal_barrel,
+                "mip->reco (hcal, endcap)": calib.mip_to_reco.hcal_endcap,
+                "ppd.mipPe": ppd.mipPe,
+                "ppd.npix": ppd.npix,
+            },
+            "rec": {},
+            "clu": {},
+            "pfo": {},
+        }
+
 
     def load_data(self) -> None:
         if self.load_parquet:
@@ -188,6 +200,8 @@ class DetailedHadronStudy:
                 ax.set_xlabel("True energy [GeV]")
                 ax.set_ylabel(f"{self.mapping[source]} energy [GeV]")
                 ax.tick_params(top=True, right=True)
+                for it, (label, value) in enumerate(self.constants[source].items()):
+                    ax.text(0.05, 0.95 - it*0.04, f"{label} = {value}", transform=ax.transAxes, fontsize=6, color="gray")
                 cbar = fig.colorbar(im, ax=ax)
                 cbar.set_label("Number of entries")
                 fig.subplots_adjust(bottom=0.14, left=0.15, right=0.95, top=0.95)
@@ -252,15 +266,15 @@ class DetailedHadronStudy:
                 # Loop over the truth objects and fill histograms
                 tru_E = 0
                 for mcp in mcpCollection:
-                    mcp_tlv = getTLV(mcp)
+                    p, e = mcp.getMomentum(), mcp.getEnergy()
                     if all([abs(mcp.getPDG()) in settings['pdgid'][self.obj_type],
                             mcp.getGeneratorStatus()==1,
-                            isGood(mcp_tlv)]):
+                            abs(eta(p[0], p[1], p[2])) < 2.0,
+                        ]):
                         mcp_n += 1
-                        my_mcp_ob = mcp_tlv
                         p, e = mcp.getMomentum(), mcp.getEnergy()
                         particleTrue = particleFromTheGun(p[0], p[1], p[2], e)
-                        tru_E = mcp.getEnergy()
+                        tru_E = e
 
                 # If there's no good truth reference, move on
                 if particleTrue is None:
@@ -394,12 +408,11 @@ def getEnergyClu(event):
 
 def getEnergyPfo(event, obj_type):
     energy = 0
-    pfoCollection = getCollection(event, "PandoraPFOs")
-    for pfo in pfoCollection:
-        pfo_tlv = getTLV(pfo)
+    pfos = getCollection(event, "PandoraPFOs")
+    for pfo in pfos:
         if abs(pfo.getType()) in settings['pdgid'][obj_type]:
-            if pfo_tlv.E() > energy:
-                energy = pfo_tlv.E()
+            if pfo.getEnergy() > energy:
+                energy = pfo.getEnergy()
     return energy
 
 if __name__ == "__main__":
