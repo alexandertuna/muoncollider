@@ -339,6 +339,9 @@ class DetailedHadronStudy:
         return particles
 
 def reconstructHcalEnergy(hit):
+    """
+    https://www.desy.de/~dudarboh/marlinreco_doc/html/RealisticCaloDigiScinPpd_8cc_source.html
+    """
     decoder.setValue((hit.getCellID0() & 0xffffffff) |
                      (hit.getCellID1() << 32))
     energy = hit.getEnergy()
