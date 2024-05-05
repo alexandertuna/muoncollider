@@ -134,34 +134,6 @@ class particleReconstructed:
     pfo_n: int
 
 
-# Set up things for each object
-settings = {
-    "fnames": {
-        "ne": "/data/fmeloni/DataMuC_MuColl10_v0A/v2/reco/neutronGun_E_250_1000*"
-    },
-    "pdgid": {
-        "ne": [2112],
-        "pi": [211, 111],
-    },
-}
-
-
-# Progress bar
-def progress(time_diff, nprocessed, ntotal):
-    nprocessed, ntotal = float(nprocessed), float(ntotal)
-    rate = (nprocessed + 1) / time_diff
-    msg = "\r > %6i / %6i | %2i%% | %8.4fHz | %6.1fm elapsed | %6.1fm remaining"
-    msg = msg % (
-        nprocessed,
-        ntotal,
-        100 * nprocessed / ntotal,
-        rate,
-        time_diff / 60,
-        (ntotal - nprocessed) / (rate * 60),
-    )
-    print(msg)
-
-
 # Script
 def main() -> None:
     ops = options()
@@ -186,6 +158,9 @@ class DetailedHadronStudy:
         self.pdgid = {
             "ne": [2112],
             "pi": [211, 111],
+        }
+        self.fnames = {
+            "ne": "/data/fmeloni/DataMuC_MuColl10_v0A/v2/reco/neutronGun_E_250_1000*",
         }
         self.mapping = {
             "sim": "Sim. Calorimeter",
@@ -282,10 +257,10 @@ class DetailedHadronStudy:
                     plt.close()
 
     def filenames(self) -> List[str]:
-        samples = glob.glob(settings["fnames"][self.obj_type])
+        dirnames = glob.glob(self.fnames[self.obj_type])
         fnames = []
-        for s in samples:
-            fnames += glob.glob(f"{s}/*.slcio")
+        for dirname in dirnames:
+            fnames += glob.glob(f"{dirname}/*.slcio")
         print("Found %i files." % len(fnames))
         return fnames
 
@@ -333,7 +308,7 @@ class DetailedHadronStudy:
                     p, e = mcp.getMomentum(), mcp.getEnergy()
                     if all(
                         [
-                            abs(mcp.getPDG()) in settings["pdgid"][self.obj_type],
+                            abs(mcp.getPDG()) in self.pdgid[self.obj_type],
                             mcp.getGeneratorStatus() == 1,
                             abs(eta(p[0], p[1], p[2])) < 2.0,
                         ]
@@ -356,7 +331,9 @@ class DetailedHadronStudy:
                 dig_e = getEnergyDig(event)
                 rec_e = getEnergyRec(event)
                 clu_e, clx_e, clu_n = getEnergyAndNumberClu(event)
-                pfo_e, pfx_e, pfo_n = getEnergyAndNumberPfo(event, self.obj_type)
+                pfo_e, pfx_e, pfo_n = getEnergyAndNumberPfo(
+                    event, self.obj_type, self.pdgid[self.obj_type]
+                )
 
                 # Count number of items
                 def countElements(event, collection_names):
@@ -419,6 +396,22 @@ class DetailedHadronStudy:
             reader.close()
 
         return particles
+
+
+# Progress bar
+def progress(time_diff, nprocessed, ntotal):
+    nprocessed, ntotal = float(nprocessed), float(ntotal)
+    rate = (nprocessed + 1) / time_diff
+    msg = "\r > %6i / %6i | %2i%% | %8.4fHz | %6.1fm elapsed | %6.1fm remaining"
+    msg = msg % (
+        nprocessed,
+        ntotal,
+        100 * nprocessed / ntotal,
+        rate,
+        time_diff / 60,
+        (ntotal - nprocessed) / (rate * 60),
+    )
+    print(msg)
 
 
 def reconstructHcalEnergy(hit):
@@ -494,7 +487,6 @@ def getEnergyRec(event):
 
 
 def getEnergyAndNumberClu(event):
-    energy_lead, energy_all, num = 0, 0, 0
     cluCollection = getCollection(event, "PandoraClusters")
     energies = [clu.getEnergy() for clu in cluCollection]
     if len(energies) == 0:
@@ -502,23 +494,12 @@ def getEnergyAndNumberClu(event):
     return max(energies), sum(energies), len(energies)
 
 
-def getEnergyAndNumberPfo(event, obj_type):
-    energy, num = 0, 0
+def getEnergyAndNumberPfo(event, obj_type, pdgids):
     pfos = getCollection(event, "PandoraPFOs")
-    energies = [
-        pfo.getEnergy()
-        for pfo in pfos
-        if abs(pfo.getType()) in settings["pdgid"][obj_type]
-    ]
+    energies = [pfo.getEnergy() for pfo in pfos if abs(pfo.getType()) in pdgids]
     if len(energies) == 0:
         return 0, 0, 0
     return max(energies), sum(energies), len(energies)
-    # for pfo in pfos:
-    #     if abs(pfo.getType()) in settings['pdgid'][obj_type]:
-    #         num += 1
-    #         if pfo.getEnergy() > energy:
-    #             energy = pfo.getEnergy()
-    # return energy, num
 
 
 if __name__ == "__main__":
