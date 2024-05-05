@@ -270,8 +270,7 @@ class DetailedHadronStudy:
         if self.num_events > 0:
             print(f"Running on {self.num_events} events at maximum")
 
-        # Loop over events
-        reader = pyLCIO.IOIMPL.LCFactory.getInstance().createLCReader()
+        # Bookkeeping
         i_total = 0
         t0 = time.time()
         fnames = self.filenames()
@@ -280,121 +279,127 @@ class DetailedHadronStudy:
         particles = []
 
         # File loop
-        for i_file, f in enumerate(fnames):
+        for i_file, fname in enumerate(fnames):
 
-            reader.open(f)
-
-            # Keep track of total events
-            if self.num_events > 0 and i_total >= self.num_events:
+            # Process
+            particles.extend(self.process_file(fname, self.num_events - len(particles)))
+            if self.num_events > 0 and len(particles) >= self.num_events:
                 break
-
-            # Event loop
-            for i_event, event in enumerate(reader):
-
-                # Keep track of total events
-                if self.num_events > 0 and i_total >= self.num_events:
-                    break
-                i_total += 1
-
-                # Get the collections we care about
-                mcpCollection = getCollection(event, "MCParticle")
-
-                # Make particle object
-                particleTrue = None
-
-                # Loop over the truth objects and fill histograms
-                tru_e, tru_n = 0, 0
-                for mcp in mcpCollection:
-                    p, e = mcp.getMomentum(), mcp.getEnergy()
-                    if all(
-                        [
-                            abs(mcp.getPDG()) in self.pdgid[self.obj_type],
-                            mcp.getGeneratorStatus() == 1,
-                            abs(eta(p[0], p[1], p[2])) < 2.0,
-                        ]
-                    ):
-                        tru_n += 1
-                        p, e = mcp.getMomentum(), mcp.getEnergy()
-                        particleTrue = particleFromTheGun(p[0], p[1], p[2], e)
-                        tru_e = e
-
-                # If there's no good truth reference, move on
-                if particleTrue is None:
-                    continue
-
-                # If there are too many truth references, get confused
-                if tru_n > 1:
-                    raise Exception(f"Found too many mcp references ({tru_n})")
-
-                # Loop over digi hits and sum
-                sim_e = getEnergySim(event)
-                dig_e = getEnergyDig(event)
-                rec_e = getEnergyRec(event)
-                clu_e, clx_e, clu_n = getEnergyAndNumberClu(event)
-                pfo_e, pfx_e, pfo_n = getEnergyAndNumberPfo(
-                    event, self.obj_type, self.pdgid[self.obj_type]
-                )
-
-                # Count number of items
-                def countElements(event, collection_names):
-                    return sum(
-                        [len(getCollection(event, name)) for name in collection_names]
-                    )
-
-                sim_n = countElements(
-                    event,
-                    [
-                        "ECalBarrelCollection",
-                        "ECalEndcapCollection",
-                        "HCalBarrelCollection",
-                        "HCalEndcapCollection",
-                    ],
-                )
-                dig_n = countElements(
-                    event,
-                    [
-                        "EcalBarrelCollectionDigi",
-                        "EcalEndcapCollectionDigi",
-                        "HcalBarrelCollectionDigi",
-                        "HcalEndcapCollectionDigi",
-                    ],
-                )
-                rec_n = countElements(
-                    event,
-                    [
-                        "EcalBarrelCollectionRec",
-                        "EcalEndcapCollectionRec",
-                        "HcalBarrelCollectionRec",
-                        "HcalEndcapCollectionRec",
-                    ],
-                )
-
-                # Create a summary
-                tru_eta, tru_phi = particleTrue.eta, particleTrue.phi
-                particleSummary = particleReconstructed(
-                    tru_eta,
-                    tru_phi,
-                    tru_e,
-                    sim_e,
-                    rec_e,
-                    dig_e,
-                    clu_e,
-                    pfo_e,
-                    clx_e,
-                    pfx_e,
-                    tru_n,
-                    sim_n,
-                    dig_n,
-                    rec_n,
-                    clu_n,
-                    pfo_n,
-                )
-                particles.append(particleSummary)
 
             # Bookkeeping
             progress(time.time() - t0, i_file + 1, len(fnames))
-            reader.close()
 
+        return particles
+
+    def process_file(self, fname, num_events) -> List[particleReconstructed]:
+
+        reader = pyLCIO.IOIMPL.LCFactory.getInstance().createLCReader()
+        reader.open(fname)
+
+        # Event loop
+        particles = []
+        for i_event, event in enumerate(reader):
+
+            # Keep track of total events
+            if num_events > 0 and i_event >= num_events:
+                break
+
+            # Get the collections we care about
+            mcpCollection = getCollection(event, "MCParticle")
+
+            # Make particle object
+            particleTrue = None
+
+            # Loop over the truth objects and fill histograms
+            tru_e, tru_n = 0, 0
+            for mcp in mcpCollection:
+                p, e = mcp.getMomentum(), mcp.getEnergy()
+                if all(
+                    [
+                        abs(mcp.getPDG()) in self.pdgid[self.obj_type],
+                        mcp.getGeneratorStatus() == 1,
+                        abs(eta(p[0], p[1], p[2])) < 2.0,
+                    ]
+                ):
+                    tru_n += 1
+                    p, e = mcp.getMomentum(), mcp.getEnergy()
+                    particleTrue = particleFromTheGun(p[0], p[1], p[2], e)
+                    tru_e = e
+
+            # If there's no good truth reference, move on
+            if particleTrue is None:
+                continue
+
+            # If there are too many truth references, get confused
+            if tru_n > 1:
+                raise Exception(f"Found too many mcp references ({tru_n})")
+
+            # Loop over digi hits and sum
+            sim_e = getEnergySim(event)
+            dig_e = getEnergyDig(event)
+            rec_e = getEnergyRec(event)
+            clu_e, clx_e, clu_n = getEnergyAndNumberClu(event)
+            pfo_e, pfx_e, pfo_n = getEnergyAndNumberPfo(
+                event, self.obj_type, self.pdgid[self.obj_type]
+            )
+
+            # Count number of items
+            def countElements(event, collection_names):
+                return sum(
+                    [len(getCollection(event, name)) for name in collection_names]
+                )
+
+            sim_n = countElements(
+                event,
+                [
+                    "ECalBarrelCollection",
+                    "ECalEndcapCollection",
+                    "HCalBarrelCollection",
+                    "HCalEndcapCollection",
+                ],
+            )
+            dig_n = countElements(
+                event,
+                [
+                    "EcalBarrelCollectionDigi",
+                    "EcalEndcapCollectionDigi",
+                    "HcalBarrelCollectionDigi",
+                    "HcalEndcapCollectionDigi",
+                ],
+            )
+            rec_n = countElements(
+                event,
+                [
+                    "EcalBarrelCollectionRec",
+                    "EcalEndcapCollectionRec",
+                    "HcalBarrelCollectionRec",
+                    "HcalEndcapCollectionRec",
+                ],
+            )
+
+            # Create a summary
+            tru_eta, tru_phi = particleTrue.eta, particleTrue.phi
+            particleSummary = particleReconstructed(
+                tru_eta,
+                tru_phi,
+                tru_e,
+                sim_e,
+                rec_e,
+                dig_e,
+                clu_e,
+                pfo_e,
+                clx_e,
+                pfx_e,
+                tru_n,
+                sim_n,
+                dig_n,
+                rec_n,
+                clu_n,
+                pfo_n,
+            )
+            particles.append(particleSummary)
+
+        reader.close()
         return particles
 
 
