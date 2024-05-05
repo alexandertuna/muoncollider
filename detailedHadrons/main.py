@@ -102,6 +102,8 @@ class particleReconstructed:
     dig_e: float
     clu_e: float
     pfo_e: float
+    clx_e: float
+    pfx_e: float
     tru_n: int
     sim_n: int
     dig_n: int
@@ -145,12 +147,18 @@ class DetailedHadronStudy:
         self.load_parquet = load_parquet
         self.num_events = num_events
         self.df = pd.DataFrame()
+        self.pdgid = {
+            "ne": [2112],
+            "pi": [211, 111],
+        }
         self.mapping = {
             "sim": "Sim. Calorimeter",
             "dig": "Digi. Calorimeter",
             "rec": "Reco. Calorimeter",
             "clu": "Cluster",
             "pfo": "Reconstructed PF",
+            "clx": "All clusters",
+            "pfx": "All reconstructed PF",
         }
         self.constants = {
             "sim": {
@@ -171,6 +179,8 @@ class DetailedHadronStudy:
             "rec": {},
             "clu": {},
             "pfo": {},
+            "clx": {},
+            "pfx": {},
         }
 
 
@@ -196,7 +206,7 @@ class DetailedHadronStudy:
         linex = liney = [min(binsx), max(binsx)]
 
         with PdfPages("energy.pdf") as pdf:
-            for source in ["sim", "dig", "rec", "clu", "pfo"]:
+            for source in ["sim", "dig", "rec", "clu", "pfo", "clx", "pfx"]:
                 for eta_min, eta_max in ETAS:
                     print(f"Plotting {source} energy in eta range {eta_min}, {eta_max} ... ")
                     fig, ax = plt.subplots(figsize=(5, 4))
@@ -217,6 +227,7 @@ class DetailedHadronStudy:
                     cbar.set_label("Number of entries")
                     fig.subplots_adjust(bottom=0.14, left=0.15, right=0.95, top=0.95)
                     pdf.savefig()
+                    plt.close()
 
 
     def filenames(self) -> List[str]:
@@ -291,8 +302,8 @@ class DetailedHadronStudy:
                 sim_e = getEnergySim(event)
                 dig_e = getEnergyDig(event)
                 rec_e = getEnergyRec(event)
-                clu_e, clu_n = getEnergyAndNumberClu(event)
-                pfo_e, pfo_n = getEnergyAndNumberPfo(event, self.obj_type)
+                clu_e, clx_e, clu_n = getEnergyAndNumberClu(event)
+                pfo_e, pfx_e, pfo_n = getEnergyAndNumberPfo(event, self.obj_type)
 
                 # Count number of items
                 def countElements(event, collection_names):
@@ -322,6 +333,9 @@ class DetailedHadronStudy:
                     dig_e,
                     clu_e,
                     pfo_e,
+
+                    clx_e,
+                    pfx_e,
 
                     tru_n,
                     sim_n,
@@ -405,23 +419,26 @@ def getEnergyRec(event):
     return energy
 
 def getEnergyAndNumberClu(event):
-    energy, num = 0, 0
+    energy_lead, energy_all, num = 0, 0, 0
     cluCollection = getCollection(event, "PandoraClusters")
-    for clu in cluCollection:
-        num += 1
-        if clu.getEnergy() > energy:
-            energy = clu.getEnergy()
-    return energy, num
+    energies = [clu.getEnergy() for clu in cluCollection]
+    if len(energies) == 0:
+        return 0, 0, 0
+    return max(energies), sum(energies), len(energies)
 
 def getEnergyAndNumberPfo(event, obj_type):
     energy, num = 0, 0
     pfos = getCollection(event, "PandoraPFOs")
-    for pfo in pfos:
-        if abs(pfo.getType()) in settings['pdgid'][obj_type]:
-            num += 1
-            if pfo.getEnergy() > energy:
-                energy = pfo.getEnergy()
-    return energy, num
+    energies = [pfo.getEnergy() for pfo in pfos if abs(pfo.getType()) in settings['pdgid'][obj_type]]
+    if len(energies) == 0:
+        return 0, 0, 0
+    return max(energies), sum(energies), len(energies)
+    # for pfo in pfos:
+    #     if abs(pfo.getType()) in settings['pdgid'][obj_type]:
+    #         num += 1
+    #         if pfo.getEnergy() > energy:
+    #             energy = pfo.getEnergy()
+    # return energy, num
 
 if __name__ == "__main__":
     main()
