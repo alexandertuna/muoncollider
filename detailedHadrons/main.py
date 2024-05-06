@@ -142,6 +142,7 @@ def main() -> None:
     if not ops.l:
         study.write_data()
     study.plot_energy()
+    study.plot_multiplicity()
 
 
 # Analysis class
@@ -206,6 +207,32 @@ class DetailedHadronStudy:
 
     def write_data(self) -> None:
         self.df.to_parquet(self.parquet_name)
+
+    def plot_multiplicity(self) -> None:
+        print("Plotting multiplicity ... ")
+        xmax = {
+            "sim": 45000,
+            "dig": 20000,
+            "rec": 20000,
+            "clu": 60,
+            "pfo": 30,
+        }
+        with PdfPages("multiplicity.pdf") as pdf:
+            for source in ["sim", "dig", "rec", "clu", "pfo"]:
+                fig, ax = plt.subplots(figsize=(4, 4))
+                bins = (
+                    np.arange(xmax[source]) - 0.5
+                    if xmax[source] < 100
+                    else np.linspace(0, xmax[source], 100)
+                )
+                ax.hist(self.df[f"{source}_n"], bins=bins)
+                ax.set_xlabel(f"N({self.mapping[source]})")
+                ax.set_ylabel(f"Number of occurrences")
+                fig.subplots_adjust(bottom=0.14, left=0.15, right=0.95, top=0.95)
+                pdf.savefig()
+                ax.semilogy()
+                pdf.savefig()
+                plt.close()
 
     def plot_energy(self) -> None:
         print("Plotting energy ... ")
