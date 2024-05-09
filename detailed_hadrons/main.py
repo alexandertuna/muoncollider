@@ -57,7 +57,7 @@ def options() -> argparse.ArgumentParser:
     parser.add_argument(
         "-p",
         help="Parquet file to read and/or write (default: %(default)s)",
-        default="detailedHadrons.parquet",
+        default="detailed_hadrons.parquet",
     )
     parser.add_argument(
         "-l", help="Load parquet file instead of lcio", action="store_true"
