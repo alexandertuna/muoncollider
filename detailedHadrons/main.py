@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
 ETAS = [
+    (0.0, 2.0),
     (0.0, 1.1),
     (1.1, 1.2),
     (1.2, 2.0),
@@ -237,7 +238,7 @@ class DetailedHadronStudy:
     def plot_energy(self) -> None:
         print("Plotting energy ... ")
 
-        binsx = binsy = np.arange(0, 1501, 15)
+        binsx = binsy = np.linspace(0, 1100, 101)
         linex = liney = [min(binsx), max(binsx)]
 
         with PdfPages("energy.pdf") as pdf:
