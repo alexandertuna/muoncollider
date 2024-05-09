@@ -29,6 +29,19 @@ encoding = "system:0:5,side:5:-2,module:7:8,stave:15:4,layer:19:9,submodule:28:4
 decoder = UTIL.BitField64(encoding)
 
 
+# Script
+def main() -> None:
+    ops = options()
+    study = DetailedHadronStudy(
+        obj_type=ops.i, parquet_name=ops.p, load_parquet=ops.l, num_events=ops.n
+    )
+    study.load_data()
+    if not ops.l:
+        study.write_data()
+    study.plot_energy()
+    study.plot_multiplicity()
+
+
 # Command-line options
 def options() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
@@ -91,18 +104,6 @@ class sampling_scaling:
     hcal_endcap = calib.mip_to_reco.hcal_endcap / calib.mip.hcal_endcap
 
 
-def theta(x: float, y: float, z: float) -> float:
-    return np.arccos(z / np.linalg.norm([x, y, z]))
-
-
-def eta(x: float, y: float, z: float) -> float:
-    return -np.log(np.tan(theta(x, y, z) / 2.0))
-
-
-def phi(x: float, y: float) -> float:
-    return np.arctan2(y, x)
-
-
 @dataclass
 class particleFromTheGun:
     px: float
@@ -133,17 +134,6 @@ class particleReconstructed:
     rec_n: int
     clu_n: int
     pfo_n: int
-
-
-# Script
-def main() -> None:
-    ops = options()
-    study = DetailedHadronStudy(ops.i, ops.p, ops.l, ops.n)
-    study.load_data()
-    if not ops.l:
-        study.write_data()
-    study.plot_energy()
-    study.plot_multiplicity()
 
 
 # Analysis class
@@ -242,7 +232,7 @@ class DetailedHadronStudy:
         linex = liney = [min(binsx), max(binsx)]
 
         with PdfPages("energy.pdf") as pdf:
-            for source in ["sim", "dig", "rec", "clu", "pfo", "clx", "pfx"]:
+            for source in ["sim", "dig", "rec", "clu", "clx", "pfo", "pfx"]:
                 for eta_min, eta_max in ETAS:
                     print(
                         f"Plotting {source} energy in eta range {eta_min}, {eta_max} ... "
@@ -435,6 +425,21 @@ class DetailedHadronStudy:
         )
 
         return particleSummary
+
+
+# Replacing ROOT.TLorentzVector
+def theta(x: float, y: float, z: float) -> float:
+    return np.arccos(z / np.linalg.norm([x, y, z]))
+
+
+# Replacing ROOT.TLorentzVector
+def eta(x: float, y: float, z: float) -> float:
+    return -np.log(np.tan(theta(x, y, z) / 2.0))
+
+
+# Replacing ROOT.TLorentzVector
+def phi(x: float, y: float) -> float:
+    return np.arctan2(y, x)
 
 
 # Progress bar
