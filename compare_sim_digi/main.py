@@ -1,4 +1,14 @@
-# https://www.desy.de/~dudarboh/marlinreco_doc/html/RealisticCaloDigi_8h_source.html
+"""
+Recreating the digitization process by-hand.
+
+This closely follows the actual digitization, which is described in Marlin:
+https://www.desy.de/~dudarboh/marlinreco_doc/html/RealisticCaloDigi_8cc_source.html
+https://www.desy.de/~dudarboh/marlinreco_doc/html/RealisticCaloDigiSilicon_8cc_source.html
+https://www.desy.de/~dudarboh/marlinreco_doc/html/RealisticCaloDigiScinPpd_8cc_source.html
+
+And our configuration of these processes:
+https://github.com/madbaron/SteeringMacros/blob/master/k4Reco/steer_reco_CONDOR.py
+"""
 
 import pyLCIO # type: ignore
 from pyLCIO import EVENT, UTIL
@@ -37,14 +47,16 @@ def main() -> None:
 
     study = SimDigiComparison()
     for fname in FNAMES:
-        study.analyze(fname, {})
+        study.analyze(fname)
+
     print("Converting dict to pandas.DataFrame ...")
     df = pd.DataFrame(study.data)
 
     print(f"Writing {parquet_name} ...")
     df.to_parquet(parquet_name)
 
-    plot(parquet_name)
+    study.plot()
+
 
 class systems:
     ecal_barrel = 20
@@ -53,6 +65,7 @@ class systems:
     hcal_endcap = 11
     ecal = [ecal_barrel, ecal_endcap]
     hcal = [hcal_barrel, hcal_endcap]
+
 
 class DigitizedHit:
 
@@ -214,9 +227,10 @@ class SimDigiComparison:
             "digit_exists_manual": [],
             "digit_exists_pandora": [],
         }
+        self.parquet_name = "compare_sim_digi.parquet"
 
 
-    def analyze(self, fname: str, data: dict) -> None:
+    def analyze(self, fname: str) -> None:
         print(f"Analyzing {fname} ...")
         reader = pyLCIO.IOIMPL.LCFactory.getInstance().createLCReader()
         reader.open(fname)
@@ -261,47 +275,44 @@ class SimDigiComparison:
                         self.data[name].append(var)
 
 
-def plot(parquet_name):
-    print(f"Reading {parquet_name} ...")
-    df = pd.read_parquet(parquet_name)
-    print(df)
+    def plot(self):
+        print(f"Reading {self.parquet_name} ...")
+        df = pd.read_parquet(self.parquet_name)
+        print(df)
 
-    with PdfPages("digitization.pdf") as pdf:
-        for system in [10, 20]:
-            for var in ["energy", "time"]:
+        with PdfPages("digitization.pdf") as pdf:
+            for system in [10, 20]:
+                for var in ["energy", "time"]:
 
-                condition = (df.system == system) & df.digit_exists_manual & df.digit_exists_pandora
-                subset = df[condition]
+                    condition = (df.system == system) & df.digit_exists_manual & df.digit_exists_pandora
+                    subset = df[condition]
 
-                # 1D comparison
-                fig, ax = plt.subplots(figsize=(4, 4))
-                bins = np.linspace(-0.5, 0.5, 200)
-                ax.hist((subset[f"digit_{var}_manual"] - subset[f"digit_{var}_pandora"]) / subset[f"digit_{var}_pandora"], bins=bins)
-                ax.set_xlabel(f"System {system} {var} (byhand - pandora) / pandora")
-                ax.tick_params(top=True, right=True)
-                pdf.savefig()
-                plt.close()
+                    # 1D comparison
+                    fig, ax = plt.subplots(figsize=(4, 4))
+                    bins = np.linspace(-0.5, 0.5, 200)
+                    ax.hist((subset[f"digit_{var}_manual"] - subset[f"digit_{var}_pandora"]) / subset[f"digit_{var}_pandora"], bins=bins)
+                    ax.set_xlabel(f"System {system} {var} (byhand - pandora) / pandora")
+                    ax.tick_params(top=True, right=True)
+                    pdf.savefig()
+                    plt.close()
 
-                # 2D comparison
-                fig, ax = plt.subplots(figsize=(4, 4))
-                min_val = min([subset[f"digit_{var}_pandora"].min(), subset[f"digit_{var}_manual"].min()])
-                max_val = max([subset[f"digit_{var}_pandora"].max(), subset[f"digit_{var}_manual"].max()])
-                # bins = np.logspace(-5, 3, 100)
-                # print('min/max', min_val, max_val)
-                # print('logs', math.log(min_val, 10), math.log(max_val, 10))
-                if var == "energy":
-                    bins = np.logspace(math.log(min_val, 10), math.log(max_val, 10), 100)
-                else:
-                    bins = np.linspace(min_val, max_val, 100)
-                ax.hist2d(subset[f"digit_{var}_pandora"], subset[f"digit_{var}_manual"], bins=[bins, bins], cmap="rainbow", cmin=1e-7)
-                ax.set_xlabel(f"System {system} {var} pandora")
-                ax.set_ylabel(f"System {system} {var} byhand")
-                ax.tick_params(top=True, right=True)
-                if var == "energy":
-                    ax.semilogx()
-                    ax.semilogy()
-                pdf.savefig()
-                plt.close()
+                    # 2D comparison
+                    fig, ax = plt.subplots(figsize=(4, 4))
+                    min_val = min([subset[f"digit_{var}_pandora"].min(), subset[f"digit_{var}_manual"].min()])
+                    max_val = max([subset[f"digit_{var}_pandora"].max(), subset[f"digit_{var}_manual"].max()])
+                    if var == "energy":
+                        bins = np.logspace(math.log(min_val, 10), math.log(max_val, 10), 100)
+                    else:
+                        bins = np.linspace(min_val, max_val, 100)
+                    ax.hist2d(subset[f"digit_{var}_pandora"], subset[f"digit_{var}_manual"], bins=[bins, bins], cmap="rainbow", cmin=1e-7)
+                    ax.set_xlabel(f"System {system} {var} pandora")
+                    ax.set_ylabel(f"System {system} {var} byhand")
+                    ax.tick_params(top=True, right=True)
+                    if var == "energy":
+                        ax.semilogx()
+                        ax.semilogy()
+                    pdf.savefig()
+                    plt.close()
                 
 
 if __name__ == "__main__":
