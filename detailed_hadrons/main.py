@@ -42,10 +42,10 @@ def main() -> None:
     study.load_data()
     if not ops.l:
         study.write_data()
-    study.plot_energy()
-    study.plot_multiplicity()
+    # study.plot_energy()
+    # study.plot_multiplicity()
     study.plot_pdgid()
-    study.plot_hfraction()
+    # study.plot_hfraction()
 
 
 # Command-line options
@@ -205,6 +205,8 @@ class DetailedHadronStudy:
                 lambda df: (df != NEUTRON) & (df != PHOTON) & (df != 0),
                 lambda df: df == 0,
             ]
+            labels = ["Neutron", "Photon", "Other", "None"]
+            assert len(labels) == len(conditions)
 
             # convert dataframe into histogram-friendly arrays
             npdgid = 5
@@ -222,12 +224,15 @@ class DetailedHadronStudy:
                 np.hstack(xs),
                 np.hstack(ys),
                 bins=(binsx, binsy),
-                cmap="rainbow",
+                # cmap="rainbow",
+                cmap="gnuplot2_r",
                 cmin=0.5,
             )
+            ax.set_xlabel("Energy order (lead, sublead, ...)")
+            ax.set_yticks(range(len(labels)), labels=labels)
             cbar = fig.colorbar(im, ax=ax)
             cbar.set_label("Number of entries")
-            fig.subplots_adjust(bottom=0.14, left=0.15, right=0.90, top=0.95)
+            fig.subplots_adjust(bottom=0.14, left=0.17, right=0.90, top=0.95)
 
             pdf.savefig()
             plt.close()
