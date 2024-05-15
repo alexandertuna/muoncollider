@@ -45,6 +45,7 @@ def main() -> None:
     study.plot_energy()
     study.plot_multiplicity()
     study.plot_pdgid()
+    study.plot_hfraction()
 
 
 # Command-line options
@@ -230,6 +231,52 @@ class DetailedHadronStudy:
 
             pdf.savefig()
             plt.close()
+
+    def plot_hfraction(self) -> None:
+        print("Plotting h/e ... ")
+        with PdfPages("hfraction.pdf") as pdf:
+
+            for source in ["sim", "dig", "rec"]:
+
+                hfraction = self.df[f"{source}_hcal_e"] / (self.df[f"{source}_ecal_e"] + self.df[f"{source}_hcal_e"])
+                weights = np.ones_like(self.df.tru_e)
+                weights[self.df.tru_e < 250.0] = (250.0 - 50.0) / (1000.0 - 250.0)
+                weights[self.df.tru_e < 50.0] = (50.0 - 0.0) / (1000.0 - 250.0)
+
+                # 1D
+                fig, ax = plt.subplots(figsize=(4, 4))
+                bins = np.linspace(0, 1, 100)
+                ax.hist(hfraction, bins=bins)
+                linex, liney = [1, 1], [0, 1]
+                ax.plot(linex, liney, color="gray", linewidth=1, linestyle="dashed")
+                ax.set_xlabel(f"H / (H + E) ({source}.)")
+                ax.set_ylabel(f"Neutrons")
+                ax.tick_params(top=True, right=True)
+                fig.subplots_adjust(bottom=0.14, left=0.19, right=0.95, top=0.95)
+                pdf.savefig()
+                plt.close()
+
+                # 2D
+                fig, ax = plt.subplots(figsize=(4, 4))
+                binsx = np.linspace(0, 1000, 50)
+                binsy = np.linspace(0, 1, 50)
+                counts, xedges, yedges, im = ax.hist2d(
+                    self.df.tru_e,
+                    hfraction,
+                    bins=(binsx, binsy),
+                    cmap="rainbow",
+                    cmin=np.finfo(float).eps,
+                    weights=weights,
+                    norm="log",
+                )
+                ax.set_xlabel(f"True energy [GeV]")
+                ax.set_ylabel(f"H / (H + E) ({source}.)")
+                ax.tick_params(top=True, right=True)
+                cbar = fig.colorbar(im, ax=ax)
+                cbar.set_label("Neutrons")
+                fig.subplots_adjust(bottom=0.14, left=0.15, right=0.92, top=0.95)
+                pdf.savefig()
+                plt.close()
 
     def plot_multiplicity(self) -> None:
         print("Plotting multiplicity ... ")
