@@ -69,8 +69,8 @@ NPE = 2
 def main() -> None:
 
     study = SimDigiComparison(FNAMES)
-    study.analyze()
-    study.write_dataframe()
+    # study.analyze()
+    # study.write_dataframe()
     study.plot()
 
 
@@ -81,11 +81,8 @@ class systems:
     ecal_endcap = 29
     hcal_barrel = 10
     hcal_endcap = 11
-    yoke_barrel = 13
-    yoke_endcap = 14
     ecal = [ecal_barrel, ecal_endcap]
     hcal = [hcal_barrel, hcal_endcap]
-    yoke = [yoke_barrel, yoke_endcap]
 
 
 class SimDigiComparison:
@@ -215,8 +212,8 @@ class SimDigiComparison:
                     subset = df[condition]
                     manual = subset[f"digit_{var}_manual"]
                     pandora = subset[f"digit_{var}_pandora"]
-                    if var == "energy" and system in systems.hcal:
-                        pandora = pandora + np.random.rand(len(pandora)) - 0.5
+                    # if var == "energy" and system in systems.hcal:
+                    #     pandora = pandora + np.random.rand(len(pandora)) - 0.5
 
                     # 1D comparison
                     fig, ax = plt.subplots(figsize=(4, 4))
@@ -238,9 +235,12 @@ class SimDigiComparison:
                     linex = liney = [min_val, max_val]
                     if var == "energy":
                         bins = np.logspace(math.log(min_val, 10), math.log(max_val, 10), 100)
+                        if system in systems.hcal:
+                            bins = np.unique(bins.astype(int))
                     else:
                         bins = np.linspace(min_val, max_val, 100)
-                    counts, xedges, yedges, im = ax.hist2d(pandora, manual, bins=[bins, bins], cmap="rainbow", cmin=1e-7)
+                    density = False # True if var == "energy" and system in systems.hcal else False
+                    counts, xedges, yedges, im = ax.hist2d(pandora, manual, bins=[bins, bins], cmap="rainbow", cmin=np.finfo(float).eps, density=density)
                     ax.set_xlabel(f"Digit {var} [{the_unit}] (pandora)")
                     ax.set_ylabel(f"Digit {var} [{the_unit}] (by hand)")
                     ax.tick_params(top=True, right=True)
@@ -248,9 +248,10 @@ class SimDigiComparison:
                         ax.semilogx()
                         ax.semilogy()
                     cbar = fig.colorbar(im, ax=ax)
-                    cbar.set_label("Number of hits")
+                    cbar.set_label("Number of hits" if not density else "Density (PDF)")
                     ax.text(0.08, 0.8, self.human_readable(system), transform=ax.transAxes)
-                    # ax.plot(linex, liney, color="gray", linewidth=1, linestyle="dashed")
+                    if density:
+                        ax.plot(linex, liney, color="gray", linewidth=1, linestyle="dashed")
                     fig.subplots_adjust(bottom=0.14, left=0.15, right=0.85, top=0.95)
                     pdf.savefig()
                     plt.close()
@@ -266,10 +267,6 @@ class DigitizedHit:
         self.passed = self.energy > self.threshold()
         if self.system not in systems.ecal + systems.hcal:
             raise Exception(f"Unknown system: {self.system}")
-
-
-    def is_yoke(self):
-        return self.system in systems.yoke
 
 
     def StandardIntegration(self) -> [float, float]:
