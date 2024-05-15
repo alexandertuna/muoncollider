@@ -4,7 +4,9 @@ from pyLCIO import EVENT, UTIL
 import argparse
 import glob
 import math
+import random
 import time
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import List
 
@@ -16,6 +18,8 @@ mpl.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
+NEUTRON = 2112
+PHOTON = 22
 ETAS = [
     (0.0, 2.0),
     (0.0, 1.1),
@@ -40,6 +44,7 @@ def main() -> None:
         study.write_data()
     study.plot_energy()
     study.plot_multiplicity()
+    study.plot_pdgid()
 
 
 # Command-line options
@@ -116,24 +121,41 @@ class particleFromTheGun:
         self.phi = phi(self.px, self.py)
 
 
-@dataclass
+@dataclass(frozen=True)
 class particleReconstructed:
     tru_eta: float
     tru_phi: float
     tru_e: float
     sim_e: float
-    rec_e: float
     dig_e: float
-    clu_e: float
-    pfo_e: float
-    clx_e: float
-    pfx_e: float
+    rec_e: float
+    clu_lead_e: float
+    clu_sum_e: float
+    pfo_lead_e: float
+    pfo_sum_e: float
+    neutral_lead_e: float
+    neutral_sum_e: float
+    neutron_lead_e: float
+    neutron_sum_e: float
     tru_n: int
     sim_n: int
     dig_n: int
     rec_n: int
     clu_n: int
     pfo_n: int
+    neutral_n: int
+    neutron_n: int
+    sim_ecal_e: float
+    sim_hcal_e: float
+    dig_ecal_e: float
+    dig_hcal_e: float
+    rec_ecal_e: float
+    rec_hcal_e: float
+    pdgid_0: int
+    pdgid_1: int
+    pdgid_2: int
+    pdgid_3: int
+    pdgid_4: int
 
 
 # Analysis class
@@ -148,42 +170,13 @@ class DetailedHadronStudy:
         self.num_events = num_events
         self.df = pd.DataFrame()
         self.pdgid = {
-            "ne": [2112],
+            "ne": [NEUTRON],
             "pi": [211, 111],
+            "ph": [PHOTON],
         }
         self.fnames = {
-            "ne": "/data/fmeloni/DataMuC_MuColl10_v0A/v2/reco/neutronGun_E_250_1000*",
-        }
-        self.mapping = {
-            "sim": "Sim. Calorimeter",
-            "dig": "Digi. Calorimeter",
-            "rec": "Reco. Calorimeter",
-            "clu": "Cluster",
-            "pfo": "Reconstructed PF",
-            "clx": "All clusters",
-            "pfx": "All reconstructed PF",
-        }
-        self.constants = {
-            "sim": {
-                "mip (ecal)": calib.mip.ecal,
-                "mip (hcal, barrel)": calib.mip.hcal_barrel,
-                "mip (hcal, endcap)": calib.mip.hcal_endcap,
-                "mip->reco (ecal)": calib.mip_to_reco.ecal,
-                "mip->reco (hcal, barrel)": calib.mip_to_reco.hcal_barrel,
-                "mip->reco (hcal, endcap)": calib.mip_to_reco.hcal_endcap,
-            },
-            "dig": {
-                "mip->reco (ecal)": calib.mip_to_reco.ecal,
-                "mip->reco (hcal, barrel)": calib.mip_to_reco.hcal_barrel,
-                "mip->reco (hcal, endcap)": calib.mip_to_reco.hcal_endcap,
-                "ppd.mipPe": ppd.mipPe,
-                "ppd.npix": ppd.npix,
-            },
-            "rec": {},
-            "clu": {},
-            "pfo": {},
-            "clx": {},
-            "pfx": {},
+            # "ne": "/data/fmeloni/DataMuC_MuColl10_v0A/v2/reco/neutronGun_E_250_1000*",
+            "ne": "/data/fmeloni/DataMuC_MuColl10_v0A/v2/reco/neutronGun_E_*250*",
         }
 
     def load_data(self) -> None:
@@ -199,6 +192,45 @@ class DetailedHadronStudy:
     def write_data(self) -> None:
         self.df.to_parquet(self.parquet_name)
 
+    def plot_pdgid(self) -> None:
+        print("Plotting pdgid ... ")
+        with PdfPages("pdgid.pdf") as pdf:
+            fig, ax = plt.subplots(figsize=(4, 4))
+            binsx = np.linspace(-0.5, 4.5, 5 + 1)
+            binsy = np.linspace(-0.5, 3.5, 4 + 1)
+            conditions = [
+                lambda df: df == NEUTRON,
+                lambda df: df == PHOTON,
+                lambda df: (df != NEUTRON) & (df != PHOTON) & (df != 0),
+                lambda df: df == 0,
+            ]
+
+            # convert dataframe into histogram-friendly arrays
+            npdgid = 5
+            xs, ys = [], []
+            for p in range(npdgid):
+                for i, cond in enumerate(conditions):
+                    pdgid = self.df[f"pdgid_{p}"]
+                    n_instances = cond(pdgid).sum()
+                    xs.append(p * np.ones(n_instances))
+                    ys.append(i * np.ones(n_instances))
+                    # if i == 2:
+                    #     print(pdgid[cond(pdgid)])
+
+            counts, xedges, yedges, im = ax.hist2d(
+                np.hstack(xs),
+                np.hstack(ys),
+                bins=(binsx, binsy),
+                cmap="rainbow",
+                cmin=0.5,
+            )
+            cbar = fig.colorbar(im, ax=ax)
+            cbar.set_label("Number of entries")
+            fig.subplots_adjust(bottom=0.14, left=0.15, right=0.90, top=0.95)
+
+            pdf.savefig()
+            plt.close()
+
     def plot_multiplicity(self) -> None:
         print("Plotting multiplicity ... ")
         xmax = {
@@ -207,9 +239,11 @@ class DetailedHadronStudy:
             "rec": 20000,
             "clu": 60,
             "pfo": 30,
+            "neutral": 30,
+            "neutron": 30,
         }
         with PdfPages("multiplicity.pdf") as pdf:
-            for source in ["sim", "dig", "rec", "clu", "pfo"]:
+            for source in ["sim", "dig", "rec", "clu", "pfo", "neutral", "neutron"]:
                 fig, ax = plt.subplots(figsize=(4, 4))
                 bins = (
                     np.arange(xmax[source]) - 0.5
@@ -217,7 +251,7 @@ class DetailedHadronStudy:
                     else np.linspace(0, xmax[source], 100)
                 )
                 ax.hist(self.df[f"{source}_n"], bins=bins)
-                ax.set_xlabel(f"N({self.mapping[source]})")
+                ax.set_xlabel(f"N({source})")
                 ax.set_ylabel(f"Number of occurrences")
                 fig.subplots_adjust(bottom=0.14, left=0.15, right=0.95, top=0.95)
                 pdf.savefig()
@@ -230,9 +264,38 @@ class DetailedHadronStudy:
 
         binsx = binsy = np.linspace(0, 1100, 101)
         linex = liney = [min(binsx), max(binsx)]
+        ylabel = {
+            "sim": "Sim. Calorimeter",
+            "dig": "Digi. Calorimeter",
+            "rec": "Reco. Calorimeter",
+            "clu_lead": "Leading cluster",
+            "clu_sum": "All clusters",
+            "pfo_lead": "Leading PF (all)",
+            "pfo_sum": "All PF",
+            "neutral_lead": "Leading PF (n, ph)",
+            "neutral_sum": "All PF (n, ph)",
+            "neutron_lead": "Leading PF (n)",
+            "neutron_sum": "All PF (n)",
+        }
+        constants = defaultdict(dict)
+        constants["sim"] = {
+            "mip (ecal)": calib.mip.ecal,
+            "mip (hcal, barrel)": calib.mip.hcal_barrel,
+            "mip (hcal, endcap)": calib.mip.hcal_endcap,
+            "mip->reco (ecal)": calib.mip_to_reco.ecal,
+            "mip->reco (hcal, barrel)": calib.mip_to_reco.hcal_barrel,
+            "mip->reco (hcal, endcap)": calib.mip_to_reco.hcal_endcap,
+        }
+        constants["dig"] = {
+            "mip->reco (ecal)": calib.mip_to_reco.ecal,
+            "mip->reco (hcal, barrel)": calib.mip_to_reco.hcal_barrel,
+            "mip->reco (hcal, endcap)": calib.mip_to_reco.hcal_endcap,
+            "ppd.mipPe": ppd.mipPe,
+            "ppd.npix": ppd.npix,
+        }
 
         with PdfPages("energy.pdf") as pdf:
-            for source in ["sim", "dig", "rec", "clu", "clx", "pfo", "pfx"]:
+            for source in ["sim", "dig", "rec", "clu_lead", "clu_sum", "pfo_lead", "pfo_sum", "neutral_lead", "neutral_sum", "neutron_lead", "neutron_sum"]:
                 for eta_min, eta_max in ETAS:
                     print(
                         f"Plotting {source} energy in eta range {eta_min}, {eta_max} ... "
@@ -241,16 +304,20 @@ class DetailedHadronStudy:
                     condition = (abs(self.df.tru_eta) > eta_min) & (
                         abs(self.df.tru_eta) < eta_max
                     )
+                    weights = np.ones_like(self.df.tru_e[condition])
+                    weights[self.df.tru_e[condition] < 250.0] = (250.0 - 50.0) / (1000.0 - 250.0)
+                    weights[self.df.tru_e[condition] < 50.0] = (50.0 - 0.0) / (1000.0 - 250.0)
                     counts, xedges, yedges, im = ax.hist2d(
                         self.df.tru_e[condition],
                         self.df[f"{source}_e"][condition],
                         bins=(binsx, binsy),
+                        weights=weights,
                         cmap="rainbow",
                         cmin=0.1,
                     )
                     ax.plot(linex, liney, color="gray", linewidth=1, linestyle="dashed")
                     ax.set_xlabel("True energy [GeV]")
-                    ax.set_ylabel(f"{self.mapping[source]} energy [GeV]")
+                    ax.set_ylabel(f"{ylabel[source]} energy [GeV]")
                     ax.tick_params(top=True, right=True)
                     ax.text(
                         0.05,
@@ -259,7 +326,7 @@ class DetailedHadronStudy:
                         transform=ax.transAxes,
                         fontsize=12,
                     )
-                    for it, (label, value) in enumerate(self.constants[source].items()):
+                    for it, (label, value) in enumerate(constants[source].items()):
                         ax.text(
                             0.05,
                             0.95 - it * 0.04,
@@ -280,6 +347,7 @@ class DetailedHadronStudy:
         for dirname in dirnames:
             fnames += glob.glob(f"{dirname}/*.slcio")
         print("Found %i files." % len(fnames))
+        random.shuffle(fnames)
         return fnames
 
     def read_lcio(self) -> List[particleReconstructed]:
@@ -363,12 +431,18 @@ class DetailedHadronStudy:
             raise Exception(f"Found too many mcp references ({tru_n})")
 
         # Loop over digi hits and sum
-        sim_e = getEnergySim(event)
-        dig_e = getEnergyDig(event)
-        rec_e = getEnergyRec(event)
-        clu_e, clx_e, clu_n = getEnergyAndNumberClu(event)
-        pfo_e, pfx_e, pfo_n = getEnergyAndNumberPfo(
-            event, self.obj_type, self.pdgid[self.obj_type]
+        sim_e, sim_ecal_e, sim_hcal_e = getEnergySim(event)
+        dig_e, dig_ecal_e, dig_hcal_e = getEnergyDig(event)
+        rec_e, rec_ecal_e, rec_hcal_e = getEnergyRec(event)
+        clu_lead_e, clu_sum_e, clu_n = getEnergyAndNumberClu(event)
+        pfo_lead_e, pfo_sum_e, pfo_n = getEnergyAndNumberPfo(
+            event, self.obj_type, None
+        )
+        neutral_lead_e, neutral_sum_e, neutral_n = getEnergyAndNumberPfo(
+            event, self.obj_type, self.pdgid["ne"] + self.pdgid["ph"]
+        )
+        neutron_lead_e, neutron_sum_e, neutron_n = getEnergyAndNumberPfo(
+            event, self.obj_type, self.pdgid["ne"]
         )
 
         # Count number of items
@@ -403,25 +477,46 @@ class DetailedHadronStudy:
             ],
         )
 
+        # Get energy-sorted pdgids
+        pfos = getCollection(event, "PandoraPFOs")
+        pdgids = [pfo.getType() for pfo in sorted(pfos, key=lambda pf: pf.getEnergy(), reverse=True)]
+
         # Create a summary
         tru_eta, tru_phi = particleTrue.eta, particleTrue.phi
         particleSummary = particleReconstructed(
-            tru_eta,
-            tru_phi,
-            tru_e,
-            sim_e,
-            rec_e,
-            dig_e,
-            clu_e,
-            pfo_e,
-            clx_e,
-            pfx_e,
-            tru_n,
-            sim_n,
-            dig_n,
-            rec_n,
-            clu_n,
-            pfo_n,
+            tru_eta = tru_eta,
+            tru_phi = tru_phi,
+            tru_e = tru_e,
+            sim_e = sim_e,
+            dig_e = dig_e,
+            rec_e = rec_e,
+            clu_lead_e = clu_lead_e,
+            clu_sum_e = clu_sum_e,
+            pfo_lead_e = pfo_lead_e,
+            pfo_sum_e = pfo_sum_e,
+            neutral_lead_e = neutral_lead_e,
+            neutral_sum_e = neutral_sum_e,
+            neutron_lead_e = neutron_lead_e,
+            neutron_sum_e = neutron_sum_e,
+            tru_n = tru_n,
+            sim_n = sim_n,
+            dig_n = dig_n,
+            rec_n = rec_n,
+            clu_n = clu_n,
+            pfo_n = pfo_n,
+            neutral_n = neutral_n,
+            neutron_n = neutron_n,
+            sim_ecal_e = sim_ecal_e,
+            sim_hcal_e = sim_hcal_e,
+            dig_ecal_e = dig_ecal_e,
+            dig_hcal_e = dig_hcal_e,
+            rec_ecal_e = rec_ecal_e,
+            rec_hcal_e = rec_hcal_e,
+            pdgid_0 = 0 if len(pdgids) <= 0 else pdgids[0],
+            pdgid_1 = 0 if len(pdgids) <= 1 else pdgids[1],
+            pdgid_2 = 0 if len(pdgids) <= 2 else pdgids[2],
+            pdgid_3 = 0 if len(pdgids) <= 3 else pdgids[3],
+            pdgid_4 = 0 if len(pdgids) <= 4 else pdgids[4],
         )
 
         return particleSummary
@@ -487,47 +582,57 @@ def getCollection(event, name):
 
 
 def getEnergySim(event):
-    energy = 0
+    energy_ecal, energy_hcal = 0, 0
     ecal_b = getCollection(event, "ECalBarrelCollection")
     ecal_e = getCollection(event, "ECalEndcapCollection")
     hcal_b = getCollection(event, "HCalBarrelCollection")
     hcal_e = getCollection(event, "HCalEndcapCollection")
+
     for col, scaling in [
         (ecal_b, sampling_scaling.ecal),
         (ecal_e, sampling_scaling.ecal),
+    ]:
+        for sim in col:
+            energy_ecal += sim.getEnergy() * scaling
+
+    for col, scaling in [
         (hcal_b, sampling_scaling.hcal_barrel),
         (hcal_e, sampling_scaling.hcal_endcap),
     ]:
         for sim in col:
-            energy += sim.getEnergy() * scaling
-    return energy
+            energy_hcal += sim.getEnergy() * scaling
+
+    return energy_ecal + energy_hcal, energy_ecal, energy_hcal
 
 
 def getEnergyDig(event):
-    energy = 0
+    energy_ecal, energy_hcal = 0, 0
     ecal_b = getCollection(event, "EcalBarrelCollectionDigi")
     ecal_e = getCollection(event, "EcalEndcapCollectionDigi")
     hcal_b = getCollection(event, "HcalBarrelCollectionDigi")
     hcal_e = getCollection(event, "HcalEndcapCollectionDigi")
     for col in [ecal_b, ecal_e]:
         for dig in col:
-            energy += dig.getEnergy() * calib.mip_to_reco.ecal
+            energy_ecal += dig.getEnergy() * calib.mip_to_reco.ecal
     for col in [hcal_b, hcal_e]:
         for dig in col:
-            energy += reconstructHcalEnergy(dig)
-    return energy
+            energy_hcal += reconstructHcalEnergy(dig)
+    return energy_ecal + energy_hcal, energy_ecal, energy_hcal
 
 
 def getEnergyRec(event):
-    energy = 0
+    energy_ecal, energy_hcal = 0, 0
     ecal_b = getCollection(event, "EcalBarrelCollectionRec")
     ecal_e = getCollection(event, "EcalEndcapCollectionRec")
     hcal_b = getCollection(event, "HcalBarrelCollectionRec")
     hcal_e = getCollection(event, "HcalEndcapCollectionRec")
-    for col in [ecal_b, ecal_e, hcal_b, hcal_e]:
+    for col in [ecal_b, ecal_e]:
         for rec in col:
-            energy += rec.getEnergy()
-    return energy
+            energy_ecal += rec.getEnergy()
+    for col in [hcal_b, hcal_e]:
+        for rec in col:
+            energy_hcal += rec.getEnergy()
+    return energy_ecal + energy_hcal, energy_ecal, energy_hcal
 
 
 def getEnergyAndNumberClu(event):
@@ -540,7 +645,7 @@ def getEnergyAndNumberClu(event):
 
 def getEnergyAndNumberPfo(event, obj_type, pdgids):
     pfos = getCollection(event, "PandoraPFOs")
-    energies = [pfo.getEnergy() for pfo in pfos if abs(pfo.getType()) in pdgids]
+    energies = [pfo.getEnergy() for pfo in pfos if (pdgids==None or abs(pfo.getType()) in pdgids)]
     if len(energies) == 0:
         return 0, 0, 0
     return max(energies), sum(energies), len(energies)
