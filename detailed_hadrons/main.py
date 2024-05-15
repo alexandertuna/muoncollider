@@ -20,6 +20,11 @@ from matplotlib.backends.backend_pdf import PdfPages
 
 NEUTRON = 2112
 PHOTON = 22
+ENERGIES = [
+    (0.0, 50.0),
+    (50.0, 250.0),
+    (250.0, 1000.0),
+]
 ETAS = [
     (0.0, 2.0),
     (0.0, 1.1),
@@ -44,8 +49,8 @@ def main() -> None:
         study.write_data()
     # study.plot_energy()
     # study.plot_multiplicity()
-    study.plot_pdgid()
-    # study.plot_hfraction()
+    # study.plot_pdgid()
+    study.plot_hfraction()
 
 
 # Command-line options
@@ -244,9 +249,7 @@ class DetailedHadronStudy:
             for source in ["sim", "dig", "rec"]:
 
                 hfraction = self.df[f"{source}_hcal_e"] / (self.df[f"{source}_ecal_e"] + self.df[f"{source}_hcal_e"])
-                weights = np.ones_like(self.df.tru_e)
-                weights[self.df.tru_e < 250.0] = (250.0 - 50.0) / (1000.0 - 250.0)
-                weights[self.df.tru_e < 50.0] = (50.0 - 0.0) / (1000.0 - 250.0)
+                weights = np.vectorize(weight)(self.df.tru_e)
 
                 # 1D
                 fig, ax = plt.subplots(figsize=(4, 4))
@@ -702,6 +705,11 @@ def getEnergyAndNumberPfo(event, obj_type, pdgids):
         return 0, 0, 0
     return max(energies), sum(energies), len(energies)
 
+def weight(energy: float) -> float:
+    for e_min, e_max in ENERGIES:
+        if energy < e_max:
+            return (e_max - e_min) / 1000.0
+    raise Exception(f"Cannot weight energy: {energy}")
 
 if __name__ == "__main__":
     main()
