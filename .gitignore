@@ -1,4 +1,7 @@
-*pdf
+*.pdf
 *~
 *__pycache__*
-*pyc
+*.pyc
+*.parquet
+*.bak
+*.root
