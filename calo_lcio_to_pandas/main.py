@@ -39,7 +39,6 @@ class CaloHitWriter:
 
     def read_hits(self) -> None:
         n_workers = 10
-        list_of_dfs = []
         with mp.Pool(n_workers) as pool:
             results = pool.map(self.read_hits_serially, self.fnames)
         self.df = pd.DataFrame(self.merge_results(results))
@@ -60,6 +59,7 @@ class CaloHitWriter:
         start = time.perf_counter()
         results = [self.processEventCellView(event) for event in reader]
         end = time.perf_counter()
+        reader.close()
         self.announceTime(end-start, len(results))
         return self.merge_results(results)
 
@@ -117,9 +117,6 @@ class CaloHitWriter:
                 d['truth_py'].append(truth_py)
                 d['truth_pz'].append(truth_pz)
                 d['truth_e'].append(truth_e)
-                # if i_hit < 10:
-                #     print(i_hit, cellIdDecoder.valueString(), f'x={x:.1f} y={y:.1f} z={z:.1f}')
-        # return pd.DataFrame(d)
         return d
 
 
