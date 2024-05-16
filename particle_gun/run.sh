@@ -1,5 +1,13 @@
-LCIO="pgun_mu.slcio"
+EVENTS="10"
+PARTICLE="2112"
+ENERGY="50 500"
+THETA=20
+PHI=0
+LCIO="pgun_neutron.slcio"
+SIM="pgun_neutron.sim.slcio"
 
-python ../mucoll-benchmarks/generation/pgun/pgun_lcio.py -e 100 -p 1 --pdg -13 13 --p 10 --theta 10 170 -- ${LCIO}
+time python ../mucoll-benchmarks/generation/pgun/pgun_lcio.py -e ${EVENTS} -p 1 --pdg ${PARTICLE} --p ${ENERGY} --theta ${THETA} --phi ${PHI} -- ${LCIO}
 
-ddsim --steeringFile ../mucoll-benchmarks/simulation/ilcsoft/steer_baseline.py --inputFile ${LCIO}
+time ddsim --steeringFile ../mucoll-benchmarks/simulation/ilcsoft/steer_baseline.py --inputFile ${LCIO} --outputFile ${SIM}
+
+time Marlin --global.LCIOInputFiles=${SIM} --DD4hep.DD4hepXMLFile=${MUCOLL_GEO} ../mucoll-benchmarks/digitisation/marlin/digi_steer.xml
