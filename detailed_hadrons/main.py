@@ -47,9 +47,9 @@ def main() -> None:
     study.load_data()
     if not ops.l:
         study.write_data()
-    # study.plot_energy()
-    # study.plot_multiplicity()
-    # study.plot_pdgid()
+    study.plot_energy()
+    study.plot_multiplicity()
+    study.plot_pdgid()
     study.plot_hfraction()
 
 
