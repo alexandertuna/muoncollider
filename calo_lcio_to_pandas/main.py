@@ -36,6 +36,16 @@ class CaloHitWriter:
         self.fnames = fnames
         self.pqname = pqname
         self.df = self.default_dict()
+        self.collections = [
+            # "ECalBarrelCollection",
+            # "ECalEndcapCollection",
+            # "HCalBarrelCollection",
+            # "HCalEndcapCollection",
+            "EcalBarrelCollectionRec",
+            "EcalEndcapCollectionRec",
+            "HcalBarrelCollectionRec",
+            "HcalEndcapCollectionRec",
+        ]
 
     def read_hits(self) -> None:
         n_workers = 10
@@ -83,16 +93,13 @@ class CaloHitWriter:
 
     def processEventCellView(self, event: Any) -> dict:
         # print(f'On event {event}')
-        colnames = [
-            "ECalBarrelCollection",
-            "ECalEndcapCollection",
-            "HCalBarrelCollection",
-            "HCalEndcapCollection",
-        ]
-        truth_px, truth_py, truth_pz, truth_e = self.processEventTruth(event)
-        cols = [event.getCollection(name) for name in colnames]
         d = self.default_dict()
-        for colname, col in zip(colnames, cols):
+        truth_px, truth_py, truth_pz, truth_e = self.processEventTruth(event)
+        allnames = event.getCollectionNames()
+        for colname in self.collections:
+            if colname not in allnames:
+                continue
+            col = event.getCollection(colname)
             cellIdEncoding = col.getParameters().getStringVal(EVENT.LCIO.CellIDEncoding)
             cellIdDecoder = UTIL.BitField64(cellIdEncoding)
             for i_hit, hit in enumerate(col):
