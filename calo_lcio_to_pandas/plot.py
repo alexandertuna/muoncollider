@@ -23,6 +23,9 @@ x_endcap_c = radius * np.cos(phis)
 y_endcap_c = radius * np.sin(phis)
 z_endcap_c = -np.ones(n_points)*HCalEndcap_max_z
 
+x_barrel_mid = np.zeros(n_points)
+y_barrel_mid = np.zeros(n_points)
+z_barrel_mid = np.linspace(-HCalEndcap_max_z, HCalEndcap_max_z, n_points)
 x_barrel_top = np.ones(n_points)*HCalEndcap_outer_radius
 y_barrel_top = np.zeros(n_points)
 z_barrel_top = np.linspace(-HCalEndcap_max_z, HCalEndcap_max_z, n_points)
@@ -59,8 +62,9 @@ for row in range(rows):
                                ), row=row+1, col=1)
     mode = "lines"
     outline = dict(width=2, color="#000000")
-    fig.add_trace(go.Scatter3d(x=x_barrel_top, y=y_barrel_top, z=z_barrel_top, mode=mode, line=outline), row=row+1, col=1)
-    fig.add_trace(go.Scatter3d(x=x_barrel_bot, y=y_barrel_bot, z=z_barrel_bot, mode=mode, line=outline), row=row+1, col=1)
+    fig.add_trace(go.Scatter3d(x=x_barrel_mid, y=y_barrel_mid, z=z_barrel_mid, mode=mode, line=outline), row=row+1, col=1)
+    # fig.add_trace(go.Scatter3d(x=x_barrel_top, y=y_barrel_top, z=z_barrel_top, mode=mode, line=outline), row=row+1, col=1)
+    # fig.add_trace(go.Scatter3d(x=x_barrel_bot, y=y_barrel_bot, z=z_barrel_bot, mode=mode, line=outline), row=row+1, col=1)
     fig.add_trace(go.Scatter3d(x=x_endcap_a, y=y_endcap_a, z=z_endcap_a, mode=mode, line=outline), row=row+1, col=1)
     fig.add_trace(go.Scatter3d(x=x_endcap_c, y=y_endcap_c, z=z_endcap_c, mode=mode, line=outline), row=row+1, col=1)
 
