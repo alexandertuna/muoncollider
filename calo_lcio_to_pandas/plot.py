@@ -1,8 +1,8 @@
 import numpy as np
 import pandas as pd
-import plotly.graph_objs as go
-import plotly.express as px
-from plotly.subplots import make_subplots
+import plotly.graph_objs as go # type: ignore
+import plotly.express as px # type: ignore
+from plotly.subplots import make_subplots # type: ignore
 
 # pqname = "writeCaloHits.parquet"
 pqname = "pgun_neutron.reco.100.parquet"
