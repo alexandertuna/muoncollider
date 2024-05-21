@@ -4,7 +4,8 @@ import plotly.graph_objs as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 
-pqname = "writeCaloHits.parquet"
+# pqname = "writeCaloHits.parquet"
+pqname = "pgun_neutron.reco.100.parquet"
 df_all = pd.read_parquet(pqname)
 
 # https://github.com/MuonColliderSoft/lcgeo/blob/master/MuColl/MuColl_v1.1/config.xml
