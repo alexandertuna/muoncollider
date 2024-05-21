@@ -34,8 +34,11 @@ y_barrel_bot = np.zeros(n_points)
 z_barrel_bot = np.linspace(-HCalEndcap_max_z, HCalEndcap_max_z, n_points)
 
 rows = 3
-specs = [ [{"type": "scatter3d"}] ]*rows
-fig = make_subplots(rows=rows, cols=1, specs=specs)
+cols = 1
+specs = [
+    [{"type": "scatter3d"}] * cols
+] * rows
+fig = make_subplots(rows=rows, cols=cols, specs=specs)
 
 for row in range(rows):
 
@@ -48,26 +51,38 @@ for row in range(rows):
 
     ecal = dict(size=2, color="#ff0000")
     hcal = dict(size=2, color="#0000ff")
-    fig.add_trace(go.Scatter3d(x=df_hcal.hit_x,
-                               y=df_hcal.hit_y,
-                               z=df_hcal.hit_z, 
-                               mode="markers",
-                               marker=hcal,
-                               ), row=row+1, col=1)
-    fig.add_trace(go.Scatter3d(x=df_ecal.hit_x,
-                               y=df_ecal.hit_y,
-                               z=df_ecal.hit_z, 
-                               mode="markers",
-                               marker=ecal,
-                               ), row=row+1, col=1)
     mode = "lines"
     outline = dict(width=2, color="#000000")
-    fig.add_trace(go.Scatter3d(x=x_barrel_mid, y=y_barrel_mid, z=z_barrel_mid, mode=mode, line=outline), row=row+1, col=1)
-    # fig.add_trace(go.Scatter3d(x=x_barrel_top, y=y_barrel_top, z=z_barrel_top, mode=mode, line=outline), row=row+1, col=1)
-    # fig.add_trace(go.Scatter3d(x=x_barrel_bot, y=y_barrel_bot, z=z_barrel_bot, mode=mode, line=outline), row=row+1, col=1)
-    fig.add_trace(go.Scatter3d(x=x_endcap_a, y=y_endcap_a, z=z_endcap_a, mode=mode, line=outline), row=row+1, col=1)
-    fig.add_trace(go.Scatter3d(x=x_endcap_c, y=y_endcap_c, z=z_endcap_c, mode=mode, line=outline), row=row+1, col=1)
+    for col in range(cols):
+        fig.add_trace(go.Scatter3d(x=df_hcal.hit_x,
+                                   y=df_hcal.hit_y,
+                                   z=df_hcal.hit_z,
+                                   mode="markers",
+                                   marker=hcal,
+                               ), row=row+1, col=col+1)
+        fig.add_trace(go.Scatter3d(x=df_ecal.hit_x,
+                                   y=df_ecal.hit_y,
+                                   z=df_ecal.hit_z,
+                                   mode="markers",
+                                   marker=ecal,
+                               ), row=row+1, col=col+1)
+        if col == 0:
+            fig.add_trace(go.Scatter3d(x=x_barrel_mid, y=y_barrel_mid, z=z_barrel_mid, mode=mode, line=outline), row=row+1, col=col+1)
+            fig.add_trace(go.Scatter3d(x=x_endcap_a, y=y_endcap_a, z=z_endcap_a, mode=mode, line=outline), row=row+1, col=col+1)
+            fig.add_trace(go.Scatter3d(x=x_endcap_c, y=y_endcap_c, z=z_endcap_c, mode=mode, line=outline), row=row+1, col=col+1)
+
 
 # fig.show()
-fig.update_layout(height=500*rows, showlegend=False)
+
+camera = dict(
+    up=dict(x=1, y=0, z=0),
+    eye=dict(x=1.25, y=1.25, z=-1.25)
+)
+
+fig.update_layout(height=700*rows, showlegend=False)
+fig.update_layout(margin=dict(l=0, r=0, b=0, t=0))
+fig.update_layout(scene_camera=camera)
+for key in fig.layout:
+    if key.startswith("scene"):
+        fig.layout[key].camera = camera
 fig.write_html("neutrons.html")
