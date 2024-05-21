@@ -11,7 +11,7 @@ import time
 from typing import Any, List, Tuple
 
 
-def options() -> argparse.ArgumentParser:
+def options() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         usage=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
@@ -35,7 +35,7 @@ class CaloHitWriter:
     def __init__(self, fnames: List[str], pqname: str) -> None:
         self.fnames = fnames
         self.pqname = pqname
-        self.df = self.default_dict()
+        self.df = pd.DataFrame()
         self.collections = [
             # "ECalBarrelCollection",
             # "ECalEndcapCollection",
