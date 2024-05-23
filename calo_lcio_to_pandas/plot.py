@@ -1,13 +1,9 @@
 import numpy as np
 import pandas as pd
 import plotly.graph_objs as go # type: ignore
-import plotly.express as px # type: ignore
 from plotly.subplots import make_subplots # type: ignore
 
 # pqname = "writeCaloHits.parquet"
-pqname = "pgun_neutron.reco.100.parquet"
-df_all = pd.read_parquet(pqname)
-
 # https://github.com/MuonColliderSoft/lcgeo/blob/master/MuColl/MuColl_v1.1/config.xml
 HCalEndcap_outer_radius = 3246.0
 HCalEndcap_min_z = 2539.0
@@ -34,44 +30,51 @@ x_barrel_bot = -np.ones(n_points)*HCalEndcap_outer_radius
 y_barrel_bot = np.zeros(n_points)
 z_barrel_bot = np.linspace(-HCalEndcap_max_z, HCalEndcap_max_z, n_points)
 
-rows = 3
-cols = 1
-specs = [
-    [{"type": "scatter3d"}] * cols
-] * rows
-fig = make_subplots(rows=rows, cols=cols, specs=specs)
+mode = "lines"
+outline = dict(width=2, color="#000000")
+
+pqname = "pgun_neutron.reco.100.parquet"
+df = pd.read_parquet(pqname)
+
+ecal = dict(size=2, color="#ff0000")
+hcal = dict(size=2, color="#0000ff")
+
+rows = 10
+specs = [ [{"type": "scatter3d"}] ] * rows
+fig = make_subplots(rows=rows, cols=1, specs=specs)
 
 for row in range(rows):
 
-    condition = df_all["event"] == row
-    df = df_all[condition]
+    event = df.event == row
+    system = df.hit_system >= 20
+    df_ecal = df[event & system]
+    df_hcal = df[event & ~system]
 
-    cond = df["hit_system"] >= 20
-    df_ecal = df[cond]
-    df_hcal = df[~cond]
+    fig.add_trace(
+        go.Scatter3d(
+            x=df_ecal.hit_x,
+            y=df_ecal.hit_y,
+            z=df_ecal.hit_z,
+            mode="markers",
+            marker=ecal,
+        ),
+        row=row+1, col=1,
+    )
+    fig.add_trace(
+        go.Scatter3d(
+            x=df_hcal.hit_x,
+            y=df_hcal.hit_y,
+            z=df_hcal.hit_z,
+            mode="markers",
+            marker=hcal,
+        ),
+        row=row+1, col=1,
+    )
 
-    ecal = dict(size=2, color="#ff0000")
-    hcal = dict(size=2, color="#0000ff")
-    mode = "lines"
-    outline = dict(width=2, color="#000000")
-    for col in range(cols):
-        fig.add_trace(go.Scatter3d(x=df_hcal.hit_x,
-                                   y=df_hcal.hit_y,
-                                   z=df_hcal.hit_z,
-                                   mode="markers",
-                                   marker=hcal,
-                               ), row=row+1, col=col+1)
-        fig.add_trace(go.Scatter3d(x=df_ecal.hit_x,
-                                   y=df_ecal.hit_y,
-                                   z=df_ecal.hit_z,
-                                   mode="markers",
-                                   marker=ecal,
-                               ), row=row+1, col=col+1)
-        if col == 0:
-            fig.add_trace(go.Scatter3d(x=x_barrel_mid, y=y_barrel_mid, z=z_barrel_mid, mode=mode, line=outline), row=row+1, col=col+1)
-            fig.add_trace(go.Scatter3d(x=x_endcap_a, y=y_endcap_a, z=z_endcap_a, mode=mode, line=outline), row=row+1, col=col+1)
-            fig.add_trace(go.Scatter3d(x=x_endcap_c, y=y_endcap_c, z=z_endcap_c, mode=mode, line=outline), row=row+1, col=col+1)
 
+    fig.add_trace(go.Scatter3d(x=x_barrel_mid, y=y_barrel_mid, z=z_barrel_mid, mode=mode, line=outline), row=row+1, col=1)
+    fig.add_trace(go.Scatter3d(x=x_endcap_a, y=y_endcap_a, z=z_endcap_a, mode=mode, line=outline), row=row+1, col=1)
+    fig.add_trace(go.Scatter3d(x=x_endcap_c, y=y_endcap_c, z=z_endcap_c, mode=mode, line=outline), row=row+1, col=1)
 
 # fig.show()
 
