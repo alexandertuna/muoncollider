@@ -138,7 +138,7 @@ def main():
                     arr[event][layer] = coo.toarray()
                     # print(layer, len(this))
 
-                    if event > 0:
+                    if event >= 0:
                         continue
 
                     this_energy = this.hit_e.sum()
@@ -185,7 +185,7 @@ def main():
                     plt.close()
 
                 # animation
-                if event == 0:
+                if event < 0:
                     print(f"Making images to animate ...")
                     fig, ax = plt.subplots()
                     images = []
@@ -250,7 +250,8 @@ def main():
     plt.savefig("fraction.pdf")
 
     # save
-    np.save(FNAME + ".npy", arr)
+    np.save(FNAME + ".features.npy", arr)
+    np.save(FNAME + ".labels.npy", truth)
 
 
 if __name__ == "__main__":
