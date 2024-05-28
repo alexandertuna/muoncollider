@@ -59,7 +59,7 @@ def options() -> argparse.ArgumentParser:
     parser.add_argument(
         "-i",
         help="Particle type to analyze (default: %(default)s)",
-        choices=["ne", "pi"],
+        choices=["ne", "pi", "ph"],
         default="ne",
     )
     parser.add_argument(
