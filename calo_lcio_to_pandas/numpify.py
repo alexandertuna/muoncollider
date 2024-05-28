@@ -126,7 +126,6 @@ def main():
 
                 for layer in layers(system):
 
-                    # this = df[(df.event == event) & (df.hit_system == system) & (df.hit_layer == layer)]
                     this = this_sys[this_sys.hit_layer == layer]
 
                     coo_df = this[
@@ -246,9 +245,11 @@ def main():
 
 
     # histogram of energy in window
-    for event in range(n_events):
-        print(int(truth[event]), int(arr[event].sum()))
+    fig, ax = plt.subplots()
+    ax.hist(arr.sum(axis=(1, 2, 3)) / truth)
+    plt.savefig("fraction.pdf")
 
+    # save
     np.save(FNAME + ".npy", arr)
 
 
