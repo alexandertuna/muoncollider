@@ -71,11 +71,6 @@ class ProcessFlatToImage:
         events, indexs = np.unique(self.df.event, return_index=True)
         self.labels = self.df.truth_e[indexs]
         # todo: add pdgid?
-        # events = np.unique(self.df.event)
-        # self.labels = np.zeros(events)
-        # for event in tqdm(events):
-        #     this_ev = self.df[self.df.event == event]
-        #     self.labels[event] = this_ev.truth_e.min()
 
     def make_image_array(self) -> None:
         # NB: this is only implemented for ecal currently
@@ -119,18 +114,6 @@ class systems:
     ecal = [ecal_barrel, ecal_endcap]
     hcal = [hcal_barrel, hcal_endcap]
 
-def layers(system: int) -> range:
-    # return range(5)
-    return range(50) if system == ECAL_ENDCAP else range(75)
-
-def subtraction_x(system: int) -> float:
-    return 0.0 # ECal_inner_radius if system == ECAL_ENDCAP else 0.0
-
-def subtraction_y(system: int) -> float:
-    return 0.0
-
-def cell_size(system: int) -> float:
-    return ECal_cell_size if system == ECAL_ENDCAP else HCal_cell_size
 
 def main2():
     print(f"Loading {FNAME} ...")
