@@ -20,6 +20,9 @@ python -m pip install mypy
 python -m pip install pyarrow
 python -m pip install pandas-stubs
 python -m pip install plotly
+python -m pip install tqdm
+python -m pip install ffmpeg
+python -m pip install ffmpeg-python
 ```
 
 Note to self: need to double-check those.

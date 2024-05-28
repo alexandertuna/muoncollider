@@ -7,6 +7,7 @@ import multiprocessing as mp
 import numpy as np
 import pandas as pd
 import time
+from tqdm import tqdm
 
 from typing import Any, List, Tuple
 
@@ -15,7 +16,8 @@ def options() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         usage=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument("-i", help="Comma-separated input filenames")
+    parser.add_argument("-i", help="Comma-separated input filenames", required=True)
+    parser.add_argument("-o", help="Output filename", required=True)
     return parser.parse_args()
 
 
@@ -24,7 +26,7 @@ def main() -> None:
     if not ops.i:
         raise Exception("Need input file with -i")
     fnames = ops.i.split(",")
-    pqname = "writeCaloHits.parquet"
+    pqname = ops.o
     writer = CaloHitWriter(fnames, pqname)
     writer.read_hits()
     writer.write_hits()
@@ -65,7 +67,9 @@ class CaloHitWriter:
         reader = pyLCIO.IOIMPL.LCFactory.getInstance().createLCReader()
         reader.open(fname)
         start = time.perf_counter()
-        results = [self.processEventCellView(event) for event in reader]
+        results = []
+        for event in tqdm(reader):
+            results.append(self.processEventCellView(event))
         end = time.perf_counter()
         reader.close()
         self.announceTime(end - start, len(results))
