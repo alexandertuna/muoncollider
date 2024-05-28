@@ -5,6 +5,11 @@ from plotly.subplots import make_subplots # type: ignore
 
 # pqname = "writeCaloHits.parquet"
 # https://github.com/MuonColliderSoft/lcgeo/blob/master/MuColl/MuColl_v1.1/config.xml
+
+# pqname = "pgun_neutron.reco.100.parquet"
+pqname = "pgun_photon.reco.50.parquet"
+df = pd.read_parquet(pqname)
+
 HCalEndcap_outer_radius = 3246.0
 HCalEndcap_min_z = 2539.0
 HCalEndcap_max_z = 4129.0
@@ -32,9 +37,6 @@ z_barrel_bot = np.linspace(-HCalEndcap_max_z, HCalEndcap_max_z, n_points)
 
 mode = "lines"
 outline = dict(width=2, color="#000000")
-
-pqname = "pgun_neutron.reco.100.parquet"
-df = pd.read_parquet(pqname)
 
 ecal = dict(size=2, color="#ff0000")
 hcal = dict(size=2, color="#0000ff")
@@ -89,4 +91,4 @@ fig.update_layout(scene_camera=camera)
 for key in fig.layout:
     if key.startswith("scene"):
         fig.layout[key].camera = camera
-fig.write_html("neutrons.html")
+fig.write_html("photons.html")
