@@ -5,13 +5,17 @@ from scipy.sparse import coo_matrix
 import matplotlib as mpl
 mpl.use("Agg")
 import matplotlib.pyplot as plt
+import matplotlib.animation as animation
 from matplotlib.backends.backend_pdf import PdfPages
+from tqdm import tqdm
 from typing import List
 
 # FNAME = "writeCaloHits.parquet"
 # FNAME = "straightening_cells.rotation_p00.parquet"
 # FNAME = "pgun_neutron.reco.1000.parquet"
-FNAME = "pgun_neutron.reco.withZeroRotation.parquet"
+# FNAME = "pgun_neutron.reco.withZeroRotation.parquet"
+# FNAME = "pgun_photon.reco.50.parquet"
+FNAME = "/work/tuna/data/generating_photons_zeroth_attempt/5000_events/pgun_photon.5000.reco.slcio.parquet"
 ECAL_ENDCAP = 29
 HCAL_ENDCAP = 11
 EVENT = 0
@@ -26,7 +30,6 @@ ECal_cell_size = 5.1
 HCal_cell_size = 30.0
 
 def layers(system: int) -> range:
-    return range(35, 40)
     return range(50) if system == ECAL_ENDCAP else range(75)
 
 def subtraction_x(system: int) -> float:
@@ -39,22 +42,27 @@ def cell_size(system: int) -> float:
     return ECal_cell_size if system == ECAL_ENDCAP else HCal_cell_size
 
 def main():
+    print(f"Loading {FNAME} ...")
     df = pd.read_parquet(FNAME)
+    print(f"Loaded!")
 
-    OFFSET = 10
+    OFFSET = 20
 
+    print(f"Deriving new columns ...")
     df["hit_xp"] = np.rint(df.hit_x / ECal_cell_size)
     df["hit_yp"] = np.rint(df.hit_y / ECal_cell_size)
     df["hit_xpp"] = np.rint((df.hit_x - (df.hit_z * np.tan(THETA))) / np.vectorize(cell_size)(df.hit_system))
     df["hit_ypp"] = np.rint((df.hit_y)                              / np.vectorize(cell_size)(df.hit_system))
     df["hit_xppp"] = np.rint((df.hit_x - (df.hit_z * np.tan(THETA))) / np.vectorize(cell_size)(df.hit_system) + OFFSET)
     df["hit_yppp"] = np.rint((df.hit_y)                              / np.vectorize(cell_size)(df.hit_system) + OFFSET)
+    print(f"Derived!")
     print(df)
 
+    CENTER = 181
     axes = {
         ECAL_ENDCAP: [
-            [872, 974, -51, 51],
-            [171, 191, -10, 10],
+            [ECal_cell_size*(CENTER - OFFSET), ECal_cell_size*(CENTER + OFFSET), -ECal_cell_size*OFFSET, ECal_cell_size*OFFSET],
+            [CENTER - OFFSET, CENTER + OFFSET, -OFFSET, OFFSET],
             [-OFFSET, OFFSET, -OFFSET, OFFSET],
             [0, 2*OFFSET, 0, 2*OFFSET],
             [0, 2*OFFSET, 0, 2*OFFSET],
@@ -85,99 +93,143 @@ def main():
         (None, None),
     ]
 
+    vmin, vmax = 0, 3
+    cmap = "gist_heat_r"
+    GeV_to_MeV = 1000.0
+    shape = (2*OFFSET, 2*OFFSET)
+    draw = False
+    n_events = 100
+
+    arr = np.zeros(shape=(n_events, len(layers(ECAL_ENDCAP)), *shape))
+
     with PdfPages(PDF) as pdf:
 
-        event = 0
+        for event in tqdm(range(n_events)):
 
-        # scatter plots
-        # for system in [ECAL_ENDCAP, HCAL_ENDCAP]:
-        for system in [ECAL_ENDCAP]:
-            print(f"Scatter plots for {system} ... ")
-            for layer in layers(system):
+            this_ev = df[df.event == event]
 
-                vmin, vmax = 0, 3
-                cmap = "gist_heat_r" # "jet"
-                GeV_to_MeV = 1000.0
+            # scatter plots
+            # for system in [ECAL_ENDCAP, HCAL_ENDCAP]:
+            for system in [ECAL_ENDCAP]:
 
-                this = df[(df.event == event) & (df.hit_system == system) & (df.hit_layer == layer)]
+                this_sys = this_ev[this_ev.hit_system == system]
+                # (fig_ani, ax_ani), images = plt.subplots(), []
 
-                # coo = coo_matrix((DATA.val, (DATA.row, DATA.col)), shape=(ROWS, COLS))
-                # arr = coo.toarray()
-                coo_df = this[
-                    (this.hit_xppp >= 0) &
-                    (this.hit_yppp >= 0) &
-                    (this.hit_xppp < 2*OFFSET) &
-                    (this.hit_yppp < 2*OFFSET)
-                ]
-                shape = (2*OFFSET, 2*OFFSET)
-                coo = coo_matrix((np.log10(GeV_to_MeV * coo_df.hit_e), (coo_df.hit_yppp, coo_df.hit_xppp)), shape=shape)
-                print(layer, len(this))
-                # if layer == 40:
-                #     print(coo.toarray())
-                #     print(coo.toarray().shape)
+                # print(f"Scatter plots for {system} ... ")
+                for layer in layers(system):
 
-                scat = [None]*len(xys)
-                cbar = [None]*len(xys)
-                fig, ax = plt.subplots(nrows=1, ncols=len(xys), figsize=(24, 4))
-                for i_ax, (x, y) in enumerate(xys):
-                    if i_ax == len(xys) - 1 and x==None and y==None:
-                        arr = coo.toarray()
-                        # arr[arr == 0] = -6
-                        im = ax[i_ax].imshow(
-                            arr,
+                    # this = df[(df.event == event) & (df.hit_system == system) & (df.hit_layer == layer)]
+                    this = this_sys[this_sys.hit_layer == layer]
+
+                    coo_df = this[
+                        (this.hit_xppp >= 0) &
+                        (this.hit_yppp >= 0) &
+                        (this.hit_xppp < 2*OFFSET) &
+                        (this.hit_yppp < 2*OFFSET)
+                    ]
+                    coo = coo_matrix((np.log10(GeV_to_MeV * coo_df.hit_e), (coo_df.hit_yppp, coo_df.hit_xppp)), shape=shape)
+                    arr[event][layer] = coo.toarray()
+                    # print(layer, len(this))
+
+                    if True:
+                        continue
+
+                    scat = [None]*len(xys)
+                    cbar = [None]*len(xys)
+                    fig, ax = plt.subplots(nrows=1, ncols=len(xys), figsize=(24, 4))
+                    for i_ax, (x, y) in enumerate(xys):
+                        if i_ax == len(xys) - 1 and x==None and y==None:
+                            im = ax[i_ax].imshow(
+                                coo.toarray(),
+                                cmap=cmap,
+                                vmin=vmin,
+                                vmax=vmax,
+                            )
+                            cbar[i_ax] = fig.colorbar(im, ax=ax[i_ax])
+                        else:
+                            scat[i_ax] = ax[i_ax].scatter(
+                                this[x],
+                                this[y],
+                                s=size[system],
+                                c=np.log10(GeV_to_MeV * this.hit_e),
+                                vmin=vmin,
+                                vmax=vmax,
+                                cmap=cmap,
+                            )
+                            cbar[i_ax] = fig.colorbar(scat[i_ax], ax=ax[i_ax])
+                        ax[i_ax].tick_params(right=True, top=True)
+                        ax[i_ax].axis(axes[system][i_ax])
+                        ax[i_ax].grid(True)
+                        ax[i_ax].set_xlabel(f"x [{unit[i_ax]}]")
+                        ax[i_ax].set_ylabel(f"y [{unit[i_ax]}]")
+                        ax[i_ax].set_axisbelow(True)
+                        cbar[i_ax].set_label("Energy [log$_{10}$(MeV)]")
+                        fig.subplots_adjust(bottom=0.14, left=0.05, right=0.96, top=0.95)
+                        fig.subplots_adjust(wspace=0.25)
+
+                    pdf.savefig()
+                    plt.close()
+
+                # animation
+                if event == 0:
+                    print(f"Making images to animate ...")
+                    fig, ax = plt.subplots()
+                    images = []
+                    first = True
+                    for layer in layers(system):
+                        im = ax.imshow(
+                            arr[event][layer],
                             cmap=cmap,
                             vmin=vmin,
                             vmax=vmax,
+                            animated=True,
                         )
-                        cbar[i_ax] = fig.colorbar(im, ax=ax[i_ax])
-                    else:
-                        scat[i_ax] = ax[i_ax].scatter(
-                            this[x],
-                            this[y],
-                            s=size[system],
-                            c=np.log10(GeV_to_MeV * this.hit_e),
-                            vmin=vmin,
-                            vmax=vmax,
-                            cmap=cmap,
-                        )
-                        cbar[i_ax] = fig.colorbar(scat[i_ax], ax=ax[i_ax])
-                    ax[i_ax].tick_params(right=True, top=True)
-                    ax[i_ax].axis(axes[system][i_ax])
-                    ax[i_ax].grid(True)
-                    ax[i_ax].set_xlabel(f"x [{unit[i_ax]}]")
-                    ax[i_ax].set_ylabel(f"y [{unit[i_ax]}]")
-                    ax[i_ax].set_axisbelow(True)
-                    cbar[i_ax].set_label("log$_{10}$(Energy [MeV])")
-                    fig.subplots_adjust(bottom=0.14, left=0.05, right=0.96, top=0.95)
-                    fig.subplots_adjust(wspace=0.25)
+                        if first:
+                            ax.set_xlabel(f"x [pixel]")
+                            ax.set_ylabel(f"y [pixel]")
+                            ax.set_axisbelow(True)
+                            cbar = fig.colorbar(im, ax=ax)
+                            cbar.set_label("Energy [log$_{10}$(MeV)]")
+                            first = False
+                        images.append([im])
+                    print(f"Making animation ...")
+                    ani = animation.ArtistAnimation(
+                        fig,
+                        images,
+                        interval=50,
+                        blit=True,
+                        repeat_delay=1000,
+                    )
+                    print(f"Saving animation ...")
+                    ani.save("movie.gif")
+                    print(f"Done animating!")
 
-                pdf.savefig()
-                plt.close()
+            # histograms
+            for system in [ECAL_ENDCAP, HCAL_ENDCAP]:
+                continue
+                print(f"Histograms for {system} ... ")
+                for layer in layers(system):
+                    this = df[(df.hit_system == system) & (df.hit_layer == layer)]
+                    fig, ax = plt.subplots(figsize=(4, 4))
+                    ax.hist2d(this.hit_xp, this.hit_yp, weights=this.hit_e, cmin=1e-6, bins=(50, 50))
+                    ax.tick_params(right=True, top=True)
+                    axes = [
+                    -ECal_outer_radius,
+                    ECal_outer_radius,
+                    -ECal_outer_radius,
+                    ECal_outer_radius,
+                    ] if system == ECAL_ENDCAP else [
+                        -HCal_outer_radius,
+                        HCal_outer_radius,
+                        -HCal_outer_radius,
+                        HCal_outer_radius,
+                    ]
+                    ax.axis(axes)
+                    ax.grid(True)
+                    pdf.savefig()
+                    plt.close()
 
-        # histograms
-        for system in [ECAL_ENDCAP, HCAL_ENDCAP]:
-            continue
-            print(f"Histograms for {system} ... ")
-            for layer in layers(system):
-                this = df[(df.hit_system == system) & (df.hit_layer == layer)]
-                fig, ax = plt.subplots(figsize=(4, 4))
-                ax.hist2d(this.hit_xp, this.hit_yp, weights=this.hit_e, cmin=1e-6, bins=(50, 50))
-                ax.tick_params(right=True, top=True)
-                axes = [
-                -ECal_outer_radius,
-                ECal_outer_radius,
-                -ECal_outer_radius,
-                ECal_outer_radius,
-                ] if system == ECAL_ENDCAP else [
-                    -HCal_outer_radius,
-                    HCal_outer_radius,
-                    -HCal_outer_radius,
-                    HCal_outer_radius,
-                ]
-                ax.axis(axes)
-                ax.grid(True)
-                pdf.savefig()
-                plt.close()
+    np.save(FNAME + ".npy", arr)
 
 
 if __name__ == "__main__":
