@@ -66,18 +66,11 @@ class CaloHitWriter:
     def read_hits_serially(self, fname: str) -> dict:
         reader = pyLCIO.IOIMPL.LCFactory.getInstance().createLCReader()
         reader.open(fname)
-        start = time.perf_counter()
         results = []
         for event in tqdm(reader):
             results.append(self.processEventCellView(event))
-        end = time.perf_counter()
         reader.close()
-        self.announceTime(end - start, len(results))
         return self.merge_results(results)
-
-    def announceTime(self, duration: float, n: int) -> None:
-        rate = n / duration
-        print(f"Event rate: {rate:.3f} Hz ({n} events)")
 
     def default_dict(self) -> dict:
         return {
@@ -93,12 +86,13 @@ class CaloHitWriter:
             "truth_py": [],
             "truth_pz": [],
             "truth_e": [],
+            "truth_pdgid": [],
         }
 
     def processEventCellView(self, event: Any) -> dict:
         # print(f'On event {event}')
         d = self.default_dict()
-        truth_px, truth_py, truth_pz, truth_e = self.processEventTruth(event)
+        truth_px, truth_py, truth_pz, truth_e, truth_pdgid = self.processEventTruth(event)
         allnames = event.getCollectionNames()
         for colname in self.collections:
             if colname not in allnames:
@@ -124,9 +118,10 @@ class CaloHitWriter:
                 d["truth_py"].append(truth_py)
                 d["truth_pz"].append(truth_pz)
                 d["truth_e"].append(truth_e)
+                d["truth_pdgid"].append(truth_pdgid)
         return d
 
-    def processEventTruth(self, event: Any) -> Tuple[float, float, float, float]:
+    def processEventTruth(self, event: Any) -> Tuple[float, float, float, float, int]:
         colname = "MCParticle"
         event_number = event.getEventNumber()
         n_stable = 0
@@ -134,12 +129,13 @@ class CaloHitWriter:
             if obj.getGeneratorStatus() == 1:
                 obj_p = obj.getMomentum()
                 obj_e = obj.getEnergy()
-                pxypyze = obj_p[0], obj_p[1], obj_p[2], obj_e
+                pdgid = obj.getPDG()
+                ret = obj_p[0], obj_p[1], obj_p[2], obj_e, pdgid
                 n_stable += 1
                 # break
         if n_stable != 1:
             raise Exception("Unexpected truth particles")
-        return pxypyze
+        return ret
 
     def write_hits(self):
         print(f"Writing hits to file: {self.df.shape}")
