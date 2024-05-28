@@ -20,6 +20,10 @@ ECAL_ENDCAP = 29
 HCAL_ENDCAP = 11
 EVENT = 0
 PDF = FNAME + ".pdf"
+PARTICLE_TYPE = {
+    22: "Photon",
+    2112: "Neutron",
+}
 
 THETA = math.radians(20.0)
 
@@ -30,6 +34,7 @@ ECal_cell_size = 5.1
 HCal_cell_size = 30.0
 
 def layers(system: int) -> range:
+    # return range(5)
     return range(50) if system == ECAL_ENDCAP else range(75)
 
 def subtraction_x(system: int) -> float:
@@ -96,26 +101,29 @@ def main():
     vmin, vmax = 0, 3
     cmap = "gist_heat_r"
     GeV_to_MeV = 1000.0
+    MeV_to_GeV = 1 / GeV_to_MeV
     shape = (2*OFFSET, 2*OFFSET)
     draw = False
-    n_events = 100
+    n_events = 10
 
     arr = np.zeros(shape=(n_events, len(layers(ECAL_ENDCAP)), *shape))
+    truth = np.zeros(n_events)
 
     with PdfPages(PDF) as pdf:
 
         for event in tqdm(range(n_events)):
 
             this_ev = df[df.event == event]
+            energy = this_ev.truth_e.min()
+            particle = PARTICLE_TYPE[this_ev.truth_pdgid.min()]
+            truth[event] = energy
 
             # scatter plots
             # for system in [ECAL_ENDCAP, HCAL_ENDCAP]:
             for system in [ECAL_ENDCAP]:
 
                 this_sys = this_ev[this_ev.hit_system == system]
-                # (fig_ani, ax_ani), images = plt.subplots(), []
 
-                # print(f"Scatter plots for {system} ... ")
                 for layer in layers(system):
 
                     # this = df[(df.event == event) & (df.hit_system == system) & (df.hit_layer == layer)]
@@ -127,12 +135,16 @@ def main():
                         (this.hit_xppp < 2*OFFSET) &
                         (this.hit_yppp < 2*OFFSET)
                     ]
-                    coo = coo_matrix((np.log10(GeV_to_MeV * coo_df.hit_e), (coo_df.hit_yppp, coo_df.hit_xppp)), shape=shape)
+                    coo = coo_matrix((coo_df.hit_e, (coo_df.hit_yppp, coo_df.hit_xppp)), shape=shape)
                     arr[event][layer] = coo.toarray()
                     # print(layer, len(this))
 
-                    if True:
+                    if event > 0:
                         continue
+
+                    this_energy = this.hit_e.sum()
+                    window_energy = coo_df.hit_e.sum()
+                    window_frac = 0 if this_energy==0 else window_energy / this_energy * 100
 
                     scat = [None]*len(xys)
                     cbar = [None]*len(xys)
@@ -140,12 +152,13 @@ def main():
                     for i_ax, (x, y) in enumerate(xys):
                         if i_ax == len(xys) - 1 and x==None and y==None:
                             im = ax[i_ax].imshow(
-                                coo.toarray(),
+                                np.log10(np.where(coo.toarray() > 0, GeV_to_MeV * coo.toarray(), 1e-3)),
                                 cmap=cmap,
                                 vmin=vmin,
                                 vmax=vmax,
                             )
                             cbar[i_ax] = fig.colorbar(im, ax=ax[i_ax])
+                            ax[i_ax].text(0.06, 0.90, f"Window E = {window_energy:.1f} ({window_frac:.1f}%)", transform=ax[i_ax].transAxes)
                         else:
                             scat[i_ax] = ax[i_ax].scatter(
                                 this[x],
@@ -163,8 +176,10 @@ def main():
                         ax[i_ax].set_xlabel(f"x [{unit[i_ax]}]")
                         ax[i_ax].set_ylabel(f"y [{unit[i_ax]}]")
                         ax[i_ax].set_axisbelow(True)
+                        ax[i_ax].text(0.06, 1.02, f"Layer {layer}", transform=ax[i_ax].transAxes)
+                        ax[i_ax].text(0.51, 1.02, f"{particle} E = {int(energy)} GeV", transform=ax[i_ax].transAxes)
                         cbar[i_ax].set_label("Energy [log$_{10}$(MeV)]")
-                        fig.subplots_adjust(bottom=0.14, left=0.05, right=0.96, top=0.95)
+                        fig.subplots_adjust(bottom=0.14, left=0.05, right=0.96, top=0.94)
                         fig.subplots_adjust(wspace=0.25)
 
                     pdf.savefig()
@@ -228,6 +243,11 @@ def main():
                     ax.grid(True)
                     pdf.savefig()
                     plt.close()
+
+
+    # histogram of energy in window
+    for event in range(n_events):
+        print(int(truth[event]), int(arr[event].sum()))
 
     np.save(FNAME + ".npy", arr)
 
