@@ -111,7 +111,7 @@ def options() -> argparse.ArgumentParser:
 # Constants: image parameters
 @dataclass(frozen=True)
 class images:
-    pixels = 20
+    pixels = 40
 
 # Constants: calo cell sizes (mm)
 @dataclass(frozen=True)
