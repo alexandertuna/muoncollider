@@ -14,6 +14,7 @@ from scipy.sparse import coo_matrix
 from tqdm import tqdm
 
 import matplotlib as mpl
+
 mpl.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
@@ -27,7 +28,12 @@ THETA = math.radians(20.0)
 
 def main() -> None:
     ops = options()
-    logging.basicConfig(filename='log.log', format='%(asctime)s %(message)s', filemode='w', level=logging.DEBUG)
+    logging.basicConfig(
+        filename="log.log",
+        format="%(asctime)s %(message)s",
+        filemode="w",
+        level=logging.DEBUG,
+    )
     processor = ProcessFlatToImage(ops.i, ops.o)
     processor.load_data()
     processor.make_new_columns()
@@ -39,7 +45,7 @@ def main() -> None:
 
 
 class ProcessFlatToImage:
-    
+
     def __init__(self, input: str, output: str) -> None:
         self.input = input
         self.output = output
@@ -48,7 +54,7 @@ class ProcessFlatToImage:
         self.df = pd.DataFrame()
         self.features = np.array([])
         self.labels = np.array([])
-        self.shape = (images.pixels, images.pixels)
+        self.shape = (img.pixels, img.pixels)
 
     def load_data(self) -> None:
         logger.info("Loading dataframe ... ")
@@ -56,45 +62,56 @@ class ProcessFlatToImage:
 
     def make_new_columns(self) -> None:
         logger.info("Making new columns of data ... ")
+
         def cell_size(system: int) -> float:
             return cell_sizes.ecal if system in systems.ecal else cell_sizes.hcal
-        cell_size = np.vectorize(cell_size)(self.df.hit_system)
-        subtract_x = self.df.hit_z * np.tan(THETA)
-        subtract_y = self.df.hit_z * 0.0
-        self.df["hit_xp"] = np.rint(self.df.hit_x / cell_size)
-        self.df["hit_yp"] = np.rint(self.df.hit_y / cell_size)
-        self.df["hit_xpp"] = np.rint((self.df.hit_x - subtract_x) / cell_size)
-        self.df["hit_ypp"] = np.rint((self.df.hit_y - subtract_y) / cell_size)
-        self.df["hit_xppp"] = np.rint((self.df.hit_x - subtract_x) / cell_size + images.pixels // 2)
-        self.df["hit_yppp"] = np.rint((self.df.hit_y - subtract_y) / cell_size + images.pixels // 2)
+
+        cell = np.vectorize(cell_size)(self.df.hit_system)
+        sub_x = self.df.hit_z * np.tan(THETA)
+        sub_y = self.df.hit_z * 0.0
+        self.df["hit_xp"] = np.rint(self.df.hit_x / cell)
+        self.df["hit_yp"] = np.rint(self.df.hit_y / cell)
+        self.df["hit_xpp"] = np.rint((self.df.hit_x - sub_x) / cell)
+        self.df["hit_ypp"] = np.rint((self.df.hit_y - sub_y) / cell)
+        self.df["hit_xppp"] = np.rint((self.df.hit_x - sub_x) / cell + img.pixels // 2)
+        self.df["hit_yppp"] = np.rint((self.df.hit_y - sub_y) / cell + img.pixels // 2)
 
     def make_label_array(self) -> None:
-        """ Group the rows by event, and pluck the truth energy of that event """
+        """Group the rows by event, and pluck the truth energy of that event"""
         logger.info("Making label array ... ")
         self.labels = self.df.groupby("event").first().truth_e
 
     def make_image_array(self) -> None:
-        """ NB: this is only implemented for ecal currently """
+        """NB: this is only implemented for ecal currently"""
         logger.info("Making image array ... ")
         events = len(np.unique(self.df.event))
         df = self.df[
-            ((self.df.hit_system == systems.ecal_barrel) |
-             (self.df.hit_system == systems.ecal_endcap)) &
-            (self.df.hit_xppp >= 0) &
-            (self.df.hit_yppp >= 0) &
-            (self.df.hit_xppp < images.pixels) &
-            (self.df.hit_yppp < images.pixels)
+            (
+                (self.df.hit_system == systems.ecal_barrel)
+                | (self.df.hit_system == systems.ecal_endcap)
+            )
+            & (self.df.hit_xppp >= 0)
+            & (self.df.hit_yppp >= 0)
+            & (self.df.hit_xppp < img.pixels)
+            & (self.df.hit_yppp < img.pixels)
         ]
+
         def process_group(group):
-            coo = coo_matrix((group["hit_e"], (group["hit_yppp"], group["hit_xppp"])), shape=self.shape)
+            coo = coo_matrix(
+                (group["hit_e"], (group["hit_yppp"], group["hit_xppp"])),
+                shape=self.shape,
+            )
             return coo.toarray()
-        self.features = np.zeros(shape=(events, layers.ecal, images.pixels, images.pixels))
+
+        self.features = np.zeros(shape=(events, layers.ecal, img.pixels, img.pixels))
         for (event, layer), group in tqdm(df.groupby(["event", "hit_layer"])):
             self.features[event, layer] = process_group(group)
 
     def write_data(self) -> None:
         logger.info("Writing npz file ... ")
-        np.savez_compressed(self.output + ".npz", features=self.features, labels=self.labels)
+        np.savez_compressed(
+            self.output + ".npz", features=self.features, labels=self.labels
+        )
 
         logger.info("Writing npy files ... ")
         np.save(self.output + ".features.npy", self.features)
@@ -104,8 +121,10 @@ class ProcessFlatToImage:
         logger.info("Making diagnostic plots ... ")
         pdfname = self.output + ".diagnostic.pdf"
         df = self.df[
-            ((self.df.hit_system == systems.ecal_barrel) |
-             (self.df.hit_system == systems.ecal_endcap))
+            (
+                (self.df.hit_system == systems.ecal_barrel)
+                | (self.df.hit_system == systems.ecal_endcap)
+            )
         ]
         with PdfPages(pdfname) as pdf:
             for i_event, event in df.groupby("event"):
@@ -123,9 +142,9 @@ class ProcessFlatToImage:
     def make_layer_plot(self, layer: int, df: pd.DataFrame, pdf: PdfPages) -> None:
         energy = df.truth_e.min()
         nplots = len(plotting.cols)
-        scat = [None]*nplots
-        cbar = [None]*nplots
-        fig, ax = plt.subplots(nrows=1, ncols=nplots, figsize=(5*nplots, 4))
+        scat = [None] * nplots
+        cbar = [None] * nplots
+        fig, ax = plt.subplots(nrows=1, ncols=nplots, figsize=(5 * nplots, 4))
         for i_ax, (x, y) in enumerate(plotting.cols):
             scat[i_ax] = ax[i_ax].scatter(
                 df[x],
@@ -196,10 +215,12 @@ def options() -> argparse.ArgumentParser:
     parser.add_argument("-o", help="Basename for output files", default="data")
     return parser.parse_args()
 
+
 # Constants: image parameters
 @dataclass(frozen=True)
-class images:
+class img:
     pixels = 40
+
 
 # Constants: calo cell sizes (mm)
 @dataclass(frozen=True)
@@ -207,11 +228,13 @@ class cell_sizes:
     ecal = 5.1
     hcal = 30.0
 
+
 # Constants: calo layers
 @dataclass(frozen=True)
 class layers:
     ecal = 50
     hcal = 75
+
 
 # Constants: system ids
 @dataclass(frozen=True)
@@ -225,17 +248,23 @@ class systems:
     ecal = [ecal_barrel, ecal_endcap]
     hcal = [hcal_barrel, hcal_endcap]
 
+
 # Constants: plotting
 @dataclass(frozen=True)
 class plotting:
-    x_center, y_center = 181.0, 0.0 # mm
+    x_center, y_center = 181.0, 0.0  # mm
     cell = cell_sizes.ecal
-    offset = images.pixels / 2
+    offset = img.pixels / 2
     axis = [
-        [cell*(x_center - offset), cell*(x_center + offset), cell*(y_center - offset), cell*(y_center + offset)],
+        [
+            cell * (x_center - offset),
+            cell * (x_center + offset),
+            cell * (y_center - offset),
+            cell * (y_center + offset),
+        ],
         [x_center - offset, x_center + offset, y_center - offset, y_center + offset],
         [-offset, offset, -offset, offset],
-        [0, 2*offset, 0, 2*offset],
+        [0, 2 * offset, 0, 2 * offset],
     ]
     unit = [
         "mm",
