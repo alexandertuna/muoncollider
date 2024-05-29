@@ -32,9 +32,10 @@ def main() -> None:
     processor = ProcessFlatToImage(ops.i, ops.o)
     processor.load_data()
     processor.make_new_columns()
-    processor.make_label_array()
-    processor.make_image_array()
-    processor.write_data()
+    processor.make_diagnostic_plots()
+    # processor.make_label_array()
+    # processor.make_image_array()
+    # processor.write_data()
 
 
 class ProcessFlatToImage:
@@ -47,7 +48,6 @@ class ProcessFlatToImage:
         self.df = pd.DataFrame()
         self.features = np.array([])
         self.labels = np.array([])
-        self.window = [0, images.pixels, 0, images.pixels]
         self.shape = (images.pixels, images.pixels)
 
     def load_data(self) -> None:
@@ -68,6 +68,9 @@ class ProcessFlatToImage:
         self.df["hit_xppp"] = np.rint((self.df.hit_x - subtract_x) / cell_size + images.pixels // 2)
         self.df["hit_yppp"] = np.rint((self.df.hit_y - subtract_y) / cell_size + images.pixels // 2)
 
+    def make_diagnostic_plots(self) -> None:
+        pass
+
     def make_label_array(self) -> None:
         """ Group the rows by event, and pluck the truth energy of that event """
         logger.info("Making label array ... ")
@@ -80,10 +83,10 @@ class ProcessFlatToImage:
         df = self.df[
             ((self.df.hit_system == systems.ecal_barrel) |
              (self.df.hit_system == systems.ecal_endcap)) &
-            (self.df.hit_xppp >= self.window[0]) &
-            (self.df.hit_yppp >= self.window[2]) &
-            (self.df.hit_xppp < self.window[1]) &
-            (self.df.hit_yppp < self.window[3])
+            (self.df.hit_xppp >= 0) &
+            (self.df.hit_yppp >= 0) &
+            (self.df.hit_xppp < image.pixels) &
+            (self.df.hit_yppp < image.pixels)
         ]
         def process_group(group):
             coo = coo_matrix((group["hit_e"], (group["hit_yppp"], group["hit_xppp"])), shape=self.shape)
