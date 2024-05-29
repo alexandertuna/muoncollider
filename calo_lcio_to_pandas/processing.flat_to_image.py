@@ -41,12 +41,13 @@ class ProcessFlatToImage:
     def __init__(self, input: str, output: str) -> None:
         self.input = input
         self.output = output
+        if not os.path.isfile(self.input):
+            raise Exception(f"File ")
         self.df = pd.DataFrame()
         self.features = np.array([])
         self.labels = np.array([])
         self.particle = {22: "photon", 2112: "neutron"}
-        if not os.path.isfile(self.input):
-            raise Exception(f"File ")
+        self.window = [0, images.pixels, 0, images.pixels]
 
     def load_data(self) -> None:
         logger.info("Loading dataframe ... ")
@@ -68,15 +69,44 @@ class ProcessFlatToImage:
 
     def make_label_array(self) -> None:
         logger.info("Making label array ... ")
-        events, indexs = np.unique(self.df.event, return_index=True)
-        self.labels = self.df.truth_e[indexs]
-        # todo: add pdgid?
+        self.labels = self.df.groupby("event").first().truth_e
 
     def make_image_array(self) -> None:
         # NB: this is only implemented for ecal currently
         logger.info("Making image array ... ")
         events, indexs = np.unique(self.df.event, return_index=True)
-        
+        print(self.df.hit_xppp)
+        df = self.df[
+            (self.df.hit_xppp >= self.window[0]) &
+            (self.df.hit_yppp >= self.window[2]) &
+            (self.df.hit_xppp < self.window[1]) &
+            (self.df.hit_yppp < self.window[3])
+        ]
+        self.features = np.zeros(shape=(len(events), layers.ecal, images.pixels, images.pixels))
+
+        test_0 = np.zeros(shape=(len(events), layers.ecal, images.pixels, images.pixels))
+        test_1 = np.zeros(shape=(len(events), layers.ecal, images.pixels, images.pixels))
+
+        # events, layers, pixels = range(100), 10, 32
+        # features = np.zeros(shape=(len(events), layers, pixels, pixels))
+
+        # grouped = df.groupby(["event", "hit_layer"])
+        # shape = (images.pixels, images.pixels)
+        # def process_group(group):
+        #     coo = coo_matrix((group["hit_e"], (group["hit_yppp"], group["hit_xppp"])), shape=shape)
+        #     return coo.toarray()
+        # for (event, layer), group in tqdm(grouped):
+        #     test_0[event, layer] = process_group(group)
+
+        # for event in tqdm(events):
+        #     this_ev = df[df.event == event]
+        #     for layer in range(layers.ecal):
+        #         this = this_ev[this_ev.hit_layer == layer]
+        #         coo = coo_matrix((this.hit_e, (this.hit_yppp, this.hit_xppp)), (images.pixels, images.pixels))
+        #         test_1[event, layer] = coo.toarray()
+
+        # print("All close:", np.allclose(test_0, test_1))
+
 
 # Command-line options
 def options() -> argparse.ArgumentParser:
