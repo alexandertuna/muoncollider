@@ -166,7 +166,7 @@ class ProcessFlatToImage:
     def annotate_axis(self, ax, i_ax: int, layer: int, energy: float) -> None:
         ax.tick_params(right=True, top=True)
         ax.axis(plotting.axis[i_ax])
-        ax.grid(True)
+        ax.grid(True, linestyle='-', linewidth=0.1, color='black')
         ax.set_xlabel(f"x [{plotting.unit[i_ax]}]")
         ax.set_ylabel(f"y [{plotting.unit[i_ax]}]")
         ax.set_axisbelow(True)
