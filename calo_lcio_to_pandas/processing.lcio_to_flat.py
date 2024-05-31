@@ -1,73 +1,108 @@
 """
-A script to convert lcio files to a flat pandas DataFrame.
-
-I avoid parallelism in handling lcio files because the format
-(and ROOT) seem designed without parallelism in mind.
+A script to convert a lcio file to a flat pandas DataFrame.
 """
 
 import pyLCIO  # type: ignore
 from pyLCIO import EVENT, UTIL
 
 import argparse
-import multiprocessing as mp
+import logging
 import numpy as np
 import pandas as pd
-import time
 from dataclasses import dataclass
 from tqdm import tqdm
 
 from typing import Any, List, Tuple
+
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.StreamHandler())
 
 
 def options() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         usage=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument("-i", help="Comma-separated input filenames", required=True)
+    parser.add_argument("-i", help="Input filename", required=True)
     parser.add_argument("-o", help="Output filename", required=True)
     return parser.parse_args()
 
 
 def main() -> None:
+    logging.basicConfig(
+        filename="log.log",
+        format="%(asctime)s %(message)s",
+        filemode="w",
+        level=logging.DEBUG,
+    )
     ops = options()
-    if not ops.i:
-        raise Exception("Need input file with -i")
-    inputs = ops.i.split(",")
-    output = ops.o
-    processor = ProcessLcioToFlat(inputs, output)
+    processor = ProcessLcioToFlat(ops.i, ops.o)
     processor.read_hits()
     processor.write_hits()
 
 
 class ProcessLcioToFlat:
 
-    def __init__(self, fnames: List[str], output: str) -> None:
-        self.fnames = fnames
+    def __init__(self, input: str, output: str) -> None:
+        self.input = input
         self.output = output
         self.df = pd.DataFrame()
 
     def read_hits(self) -> None:
-        results = [self.read_hits_serially(fname) for fname in self.fnames]
-        self.df = pd.DataFrame(self.merge_results(results))
-
-    def merge_results(self, results: List[dict]) -> dict:
-        print("Merging dicts ...")
-        result = self.default_dict()
-        for res in results:
-            for key in res:
-                result[key].extend(res[key])
-        return result
-
-    def read_hits_serially(self, fname: str) -> dict:
+        logger.info(f"Reading {self.input} ...")
         reader = pyLCIO.IOIMPL.LCFactory.getInstance().createLCReader()
-        reader.open(fname)
-        results = []
-        for event in tqdm(reader):
-            results.append(self.processEventCellView(event))
+        reader.open(self.input)
+        results = [self.read_event(event) for event in tqdm(reader)]
         reader.close()
-        return self.merge_results(results)
+        logger.info(f"Merging events into a DataFrame ...")
+        self.df = pd.concat([pd.DataFrame(res) for res in results])
 
-    def default_dict(self, n: int = 0) -> dict:
+    def read_event(self, event: Any) -> dict:
+        d = self.default_dict()
+        truth = self.read_event_truth(event)
+        event_number = event.getEventNumber()
+        allnames = event.getCollectionNames()
+        for colname in collection_names.reco:
+            if colname not in allnames:
+                continue
+            col = event.getCollection(colname)
+            for hit in col:
+                id0 = hit.getCellID0()
+                position = hit.getPosition()
+                d["event"].append(event_number)
+                d["hit_system"].append(id0 & self.mask(5))
+                d["hit_side"].append((id0 >> 5) & self.mask(2))
+                d["hit_layer"].append((id0 >> 19) & self.mask(9))
+                d["hit_x"].append(position[0])
+                d["hit_y"].append(position[1])
+                d["hit_z"].append(position[2])
+                d["hit_e"].append(hit.getEnergy())
+                d["truth_px"].append(truth.px)
+                d["truth_py"].append(truth.py)
+                d["truth_pz"].append(truth.pz)
+                d["truth_e"].append(truth.e)
+                d["truth_pdgid"].append(truth.pdgid)
+        return d
+
+    def read_event_truth(self, event: Any):
+        event_number = event.getEventNumber()
+        n_stable = 0
+        for obj in event.getCollection(collection_names.mc):
+            if obj.getGeneratorStatus() == 1:
+                obj_p = obj.getMomentum()
+                obj_e = obj.getEnergy()
+                pdgid = obj.getPDG()
+                return TruthParticle(obj_p[0], obj_p[1], obj_p[2], obj_e, pdgid)
+        raise Exception("Missing truth particle")
+
+    def mask(self, nbits: int) -> int:
+        """e.g. mask(4) returns 0b1111"""
+        return (1 << nbits) - 1
+
+    def write_hits(self) -> None:
+        logger.info(f"Writing hits to file: {self.df.shape}")
+        self.df.to_parquet(self.output)
+
+    def default_dict(self) -> dict:
         return {
             "event": [],
             "hit_system": [],
@@ -84,56 +119,14 @@ class ProcessLcioToFlat:
             "truth_pdgid": [],
         }
 
-    def processEventCellView(self, event: Any) -> dict:
-        # print(f'On event {event}')
-        d = self.default_dict()
-        truth_px, truth_py, truth_pz, truth_e, truth_pdgid = self.processEventTruth(event)
-        allnames = event.getCollectionNames()
-        for colname in collection_names.reco:
-            if colname not in allnames:
-                continue
-            col = event.getCollection(colname)
-            cellIdEncoding = col.getParameters().getStringVal(EVENT.LCIO.CellIDEncoding)
-            cellIdDecoder = UTIL.BitField64(cellIdEncoding)
-            for i_hit, hit in enumerate(col):
-                cellIdDecoder.setValue(
-                    (hit.getCellID0() & 0xFFFFFFFF) | (hit.getCellID1() << 32)
-                )
-                position = hit.getPosition()
-                x, y, z = position[0], position[1], position[2]
-                d["event"].append(event.getEventNumber())
-                d["hit_system"].append(cellIdDecoder["system"].value())
-                d["hit_side"].append(cellIdDecoder["side"].value())
-                d["hit_layer"].append(cellIdDecoder["layer"].value())
-                d["hit_x"].append(x)
-                d["hit_y"].append(y)
-                d["hit_z"].append(z)
-                d["hit_e"].append(hit.getEnergy())
-                d["truth_px"].append(truth_px)
-                d["truth_py"].append(truth_py)
-                d["truth_pz"].append(truth_pz)
-                d["truth_e"].append(truth_e)
-                d["truth_pdgid"].append(truth_pdgid)
-        return d
 
-    def processEventTruth(self, event: Any) -> Tuple[float, float, float, float, int]:
-        event_number = event.getEventNumber()
-        n_stable = 0
-        for obj in event.getCollection(collection_names.mc):
-            if obj.getGeneratorStatus() == 1:
-                obj_p = obj.getMomentum()
-                obj_e = obj.getEnergy()
-                pdgid = obj.getPDG()
-                ret = obj_p[0], obj_p[1], obj_p[2], obj_e, pdgid
-                n_stable += 1
-        if n_stable != 1:
-            raise Exception("Unexpected truth particles")
-        return ret
-
-    def write_hits(self):
-        print(f"Writing hits to file: {self.df.shape}")
-        self.df.to_parquet(self.output)
-
+@dataclass(frozen=True)
+class TruthParticle:
+    px: float
+    py: float
+    pz: float
+    e: float
+    pdgid: int
 
 # Constants: collection names
 @dataclass(frozen=True)
@@ -145,6 +138,7 @@ class collection_names:
         "HcalBarrelCollectionRec",
         "HcalEndcapCollectionRec",
     ]
+    all = reco + [mc]
 
 
 if __name__ == "__main__":
