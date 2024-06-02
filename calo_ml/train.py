@@ -1,6 +1,7 @@
 import argparse
 import logging
 import numpy as np
+from tqdm import tqdm
 
 SEED = 1337
 from sklearn.model_selection import train_test_split
@@ -26,6 +27,9 @@ def main():
     ops = options()
     trainer = Trainer(ops.f, ops.l)
     trainer.train()
+    # print the weights after training
+    print("w", trainer.model.net[0].weight)
+    print("b", trainer.model.net[0].bias)
 
 
 def options() -> argparse.Namespace:
@@ -41,16 +45,18 @@ class Trainer:
         self.model = LayerCalibration(features, labels)
         self.model.to(device)
         self.criterion = nn.MSELoss()
-        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=0.001)
-        self.n_epochs = 50
+        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=0.01, weight_decay=0.01)
+        self.n_epochs = 10
+        print(self.model.try_summing())
+        print(f"N(parameters): {sum(p.numel() for p in self.model.parameters())}")
 
     def train(self) -> None:
-        for epoch in range(self.n_epochs):
-            print(f"Epoch {epoch}")
+        for _ in tqdm(range(self.n_epochs)):
+            # print(f"Epoch {epoch}")
             self.model.train()
             for i, (x, y) in enumerate(self.model.data_train):
                 if i % 10 == 0:
-                    print(f"Batch {i}")
+                    pass # print(f"Batch {i}")
                 x = x.to(device)
                 y = y.to(device)
                 self.optimizer.zero_grad()
@@ -59,19 +65,22 @@ class Trainer:
                 loss.backward()
                 self.optimizer.step()
             self.model.eval()
-            self.evaluate_loss("train", self.model.data_train)
-            self.evaluate_loss("dev", self.model.data_dev)
+            train_loss = self.evaluate_loss("train")
+            dev_loss = self.evaluate_loss("dev")
+            print(f"Train loss = {train_loss:.1f}, dev loss = {dev_loss:.1f}")
 
-    def evaluate_loss(self, name: str, data: DataLoader) -> None:
+    def evaluate_loss(self, name: str) -> None:
+        assert name in ["train", "dev"]
         with torch.no_grad():
             loss = 0
+            data = getattr(self.model, f"data_{name}")
             for x, y in data:
                 x = x.to(device)
                 y = y.to(device)
                 y_pred = self.model(x)
                 loss += self.criterion(y_pred, y)
             loss /= len(data)
-            print(f"{name} loss: {loss}")
+            return loss
 
 class LayerCalibration(nn.Module):
 
@@ -80,12 +89,17 @@ class LayerCalibration(nn.Module):
         self.filename_features = features
         self.filename_labels = labels
         self.load_data()
+        dropout = 0.1
         layers = self.n_layers()
+        explode = 4
+        # how can I initialize weights to 1?
         self.net = nn.Sequential(
-            nn.Linear(layers, layers),
-            nn.ReLU(),
+            # nn.Linear(layers, layers * explode),
+            # nn.ReLU(),
+            # nn.Linear(layers * explode, layers * explode),
+            # nn.ReLU(),
+            # nn.Linear(layers * explode, 1),
             nn.Linear(layers, 1),
-            # nn.Dropout(dropout),
         )
         logger.info("Net:")
         logger.info(self.net)
@@ -118,18 +132,13 @@ class LayerCalibration(nn.Module):
         self.data_test = DataLoader(self.dataset_test, batch_size=32, shuffle=True)
 
     def forward(self, x):
-        #print("x.shape", x.shape)
-        #print("x.sum(axis=2, 3).shape", x.sum(axis=(2, 3)).shape)
-        #import time
-        #time.sleep(1)
         return self.net(x.sum(axis=(2, 3)))
 
-    def try_summing(self) -> None:
-        diff = self.x_train.sum(axis=(1, 2, 3)) - self.y_train
-        print(diff.shape)
-        print(diff)
-        # print(self.x_train[:events].sum(axis=(1, 2, 3)))
-        # print(self.y_train[:events])
+    def try_summing(self) -> float:
+        with torch.no_grad():
+            # get the difference between the sum of the x_train and the y_train
+            mse = nn.MSELoss()
+            return mse(self.x_train.sum(axis=(1, 2, 3)).flatten(), self.y_train.flatten())
 
 
 class ParticleDataset(Dataset):
