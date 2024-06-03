@@ -40,8 +40,9 @@ def main() -> None:
     processor.make_label_array()
     processor.make_image_array()
     processor.write_data()
-    processor.make_image_plots(events=2)
-    processor.make_diagnostic_plots(events=2)
+    if ops.d:
+        processor.make_image_plots(events=2)
+        processor.make_diagnostic_plots(events=2)
 
 
 class ProcessFlatToImage:
@@ -112,10 +113,9 @@ class ProcessFlatToImage:
         np.savez_compressed(
             self.output + ".npz", features=self.features, labels=self.labels
         )
-
-        logger.info("Writing npy files ... ")
-        np.save(self.output + ".features.npy", self.features)
-        np.save(self.output + ".labels.npy", self.labels)
+        # logger.info("Writing npy files ... ")
+        # np.save(self.output + ".features.npy", self.features)
+        # np.save(self.output + ".labels.npy", self.labels)
 
     def make_diagnostic_plots(self, events: int) -> None:
         logger.info("Making diagnostic plots ... ")
@@ -213,6 +213,7 @@ def options() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", help="Input parquet file", required=True)
     parser.add_argument("-o", help="Basename for output files", default="data")
+    parser.add_argument("-d", help="Debug by making plots", action="store_true")
     return parser.parse_args()
 
 
