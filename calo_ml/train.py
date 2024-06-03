@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
 
 
-def main():
+def main() -> None:
     logging.basicConfig(
         filename="log.log",
         format="%(asctime)s %(message)s",
@@ -25,7 +25,7 @@ def main():
         level=logging.DEBUG,
     )
     ops = options()
-    trainer = Trainer(ops.f, ops.l)
+    trainer = Trainer(ops.i)
     trainer.train()
     # print the weights after training
     print("w", trainer.model.net[0].weight)
@@ -36,13 +36,12 @@ def options() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         usage=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument("-f", help="Input filename for features", default="/work/tuna/muoncollider/data.features.npy")
-    parser.add_argument("-l", help="Input filename for labels", default="/work/tuna/muoncollider/data.labels.npy")
+    parser.add_argument("-i", help="Input filename with features and labels", default="data.npz")
     return parser.parse_args()
 
 class Trainer:
-    def __init__(self, features: str, labels: str) -> None:
-        self.model = LayerCalibration(features, labels)
+    def __init__(self, input: str) -> None:
+        self.model = LayerCalibration(input)
         self.model.to(device)
         self.criterion = nn.MSELoss()
         self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=0.01, weight_decay=0.01)
@@ -84,10 +83,9 @@ class Trainer:
 
 class LayerCalibration(nn.Module):
 
-    def __init__(self, features: str, labels: str) -> None:
+    def __init__(self, input: str) -> None:
         super().__init__()
-        self.filename_features = features
-        self.filename_labels = labels
+        self.input = input
         self.load_data()
         dropout = 0.1
         layers = self.n_layers()
@@ -110,8 +108,9 @@ class LayerCalibration(nn.Module):
 
     def load_data(self) -> None:
         logger.info("Loading data ...")
-        features = torch.tensor(np.load(self.filename_features)).float()
-        labels = torch.tensor(np.load(self.filename_labels)).reshape(-1, 1).float()
+        inp = np.load(self.input)
+        features = torch.tensor(inp["features"]).float()
+        labels = torch.tensor(inp["labels"]).reshape(-1, 1).float()
         logger.info(f"Features: {features.shape}")
         logger.info(f"Labels: {labels.shape}")
         self.x_train, x_devtest = train_test_split(features, train_size=0.8, random_state=SEED)
