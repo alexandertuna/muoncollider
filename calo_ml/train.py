@@ -25,7 +25,7 @@ def main() -> None:
         level=logging.DEBUG,
     )
     ops = options()
-    trainer = Trainer(ops.i)
+    trainer = Trainer(ops.i, int(ops.b))
     trainer.train()
     # print the weights after training
     print("w", trainer.model.net[0].weight)
@@ -37,11 +37,12 @@ def options() -> argparse.Namespace:
         usage=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument("-i", help="Input filename with features and labels", default="data.npz")
+    parser.add_argument("-b", help="Batch size", default=32)
     return parser.parse_args()
 
 class Trainer:
-    def __init__(self, input: str) -> None:
-        self.model = LayerCalibration(input)
+    def __init__(self, input: str, batch_size: int) -> None:
+        self.model = LayerCalibration(input, batch_size)
         self.model.to(device)
         self.criterion = nn.MSELoss()
         self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=0.01, weight_decay=0.01)
@@ -83,9 +84,10 @@ class Trainer:
 
 class LayerCalibration(nn.Module):
 
-    def __init__(self, input: str) -> None:
+    def __init__(self, input: str, batch_size: int) -> None:
         super().__init__()
         self.input = input
+        self.batch_size = batch_size
         self.load_data()
         dropout = 0.1
         layers = self.n_layers()
@@ -126,9 +128,9 @@ class LayerCalibration(nn.Module):
         self.dataset_train = ParticleDataset(self.x_train, self.y_train)
         self.dataset_dev = ParticleDataset(self.x_dev, self.y_dev)
         self.dataset_test = ParticleDataset(self.x_test, self.y_test)
-        self.data_train = DataLoader(self.dataset_train, batch_size=32, shuffle=True)
-        self.data_dev = DataLoader(self.dataset_dev, batch_size=32, shuffle=True)
-        self.data_test = DataLoader(self.dataset_test, batch_size=32, shuffle=True)
+        self.data_train = DataLoader(self.dataset_train, batch_size=self.batch_size, shuffle=True)
+        self.data_dev = DataLoader(self.dataset_dev, batch_size=self.batch_size, shuffle=True)
+        self.data_test = DataLoader(self.dataset_test, batch_size=self.batch_size, shuffle=True)
 
     def forward(self, x):
         return self.net(x.sum(axis=(2, 3)))
