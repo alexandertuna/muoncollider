@@ -8,7 +8,7 @@ mpl.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
-SEED = 1337
+SEED = 42 # 1337
 from sklearn.model_selection import train_test_split
 import torch
 import torch.nn as nn
@@ -30,7 +30,7 @@ def main() -> None:
         level=logging.DEBUG,
     )
     ops = options()
-    trainer = Trainer(ops.i, int(ops.b))
+    trainer = Trainer(ops.i, int(ops.b), int(ops.e))
     # trainer.train()
     trainer.plot_vs_time()
     # print the weights after training
@@ -44,18 +44,19 @@ def options() -> argparse.Namespace:
     )
     parser.add_argument("-i", help="Input filename with features and labels", default="data.npz")
     parser.add_argument("-b", help="Batch size", default=32)
+    parser.add_argument("-e", help="Epochs for training", default=16)
     return parser.parse_args()
 
 class Trainer:
-    def __init__(self, input: str, batch_size: int) -> None:
-        # self.model = LayerCalibration(input, batch_size)
-        # self.model.to(device)
-        # self.criterion = nn.MSELoss()
-        # self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=0.01, weight_decay=0.01)
-        self.n_epochs = 10
+    def __init__(self, input: str, batch_size: int, epochs: int) -> None:
+        self.model = LayerCalibration(input, batch_size)
+        self.model.to(device)
+        self.criterion = nn.MSELoss()
+        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=0.01, weight_decay=0.001)
+        self.n_epochs = epochs
         self.wandb = "weights_and_bias.npz"
-        # print(self.model.try_summing())
-        # print(f"N(parameters): {sum(p.numel() for p in self.model.parameters())}")
+        print(self.model.try_summing())
+        print(f"N(parameters): {sum(p.numel() for p in self.model.parameters())}")
 
     def train(self) -> None:
         iter_per_epoch = self.model.n_iter_per_epoch()
@@ -113,12 +114,14 @@ class Trainer:
             # draw animation
             fig, ax = plt.subplots()
             (line, ) = ax.plot([], [], color="green", marker="o", linestyle="")
+            ax.grid()
+            ax.set_axisbelow(True)
             ax.set_xlabel(f"Weight index (bias is the last one)")
             ax.set_ylabel(f"Value")
             ax.set_xlim(0, comb_vs_time.shape[1])
             ax.set_ylim(-0.2, 1.2)
             text = ax.text(0.0, 1.0, "Optimizer step 0", transform=ax.transAxes)
-            speedup = 5
+            speedup = 10
             def run(iteration):
                 if iteration % 10 == 0:
                     print(f"iteration = {iteration}")
@@ -126,8 +129,22 @@ class Trainer:
                 text.set_text(f"Optimizer step {iteration * speedup}")
                 return (line, )
             ani = animation.FuncAnimation(fig, run, frames=len(comb_vs_time)//speedup, blit=True)
-            # save as webp file
-            ani.save("weights_and_bias_vs_time.gif", writer="pillow", fps=60)
+            # write to file
+            # mpl.rcParams["animation.writer"] = "pillow"
+            # with open("weights_and_bias_vs_time.html", "w") as fi:
+            #     print(ani.to_html5_video(), file=fi)
+
+            # with open("weights_and_bias_vs_time.html", "w") as fi:
+            #     print(ani.to_jshtml(), file=fi)
+
+            # FFwriter = animation.FFMpegWriter(fps=30)
+            # ani.save('basic_animation.mp4', writer=FFwriter)
+
+            # ani.save("weights_and_bias_vs_time.mp4", writer="pillow", fps=60)
+            # ani.save("weights_and_bias_vs_time.gif", writer="pillow", fps=60)
+
+            writer = animation.PillowWriter(fps=30)
+            ani.save("weights_and_bias_vs_time.gif", writer=writer)
 
 
 
