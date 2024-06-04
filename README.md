@@ -23,7 +23,7 @@ python -m pip install plotly
 python -m pip install tqdm
 python -m pip install ffmpeg
 python -m pip install ffmpeg-python
-python -m pip install --upgrade onnx protobuf
+python -m pip install --upgrade onnx protobuf pillow
 python -m pip install ray
 ```
 
