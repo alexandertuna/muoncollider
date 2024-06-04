@@ -119,7 +119,7 @@ class Trainer:
             ax.set_xlabel(f"Weight index (bias is the last one)")
             ax.set_ylabel(f"Value")
             ax.set_xlim(0, comb_vs_time.shape[1])
-            ax.set_ylim(-0.2, 1.2)
+            ax.set_ylim(-0.2, 1.3)
             text = ax.text(0.0, 1.0, "Optimizer step 0", transform=ax.transAxes)
             speedup = 10
             def run(iteration):
@@ -129,22 +129,7 @@ class Trainer:
                 text.set_text(f"Optimizer step {iteration * speedup}")
                 return (line, )
             ani = animation.FuncAnimation(fig, run, frames=len(comb_vs_time)//speedup, blit=True)
-            # write to file
-            # mpl.rcParams["animation.writer"] = "pillow"
-            # with open("weights_and_bias_vs_time.html", "w") as fi:
-            #     print(ani.to_html5_video(), file=fi)
-
-            # with open("weights_and_bias_vs_time.html", "w") as fi:
-            #     print(ani.to_jshtml(), file=fi)
-
-            # FFwriter = animation.FFMpegWriter(fps=30)
-            # ani.save('basic_animation.mp4', writer=FFwriter)
-
-            # ani.save("weights_and_bias_vs_time.mp4", writer="pillow", fps=60)
-            # ani.save("weights_and_bias_vs_time.gif", writer="pillow", fps=60)
-
-            writer = animation.PillowWriter(fps=30)
-            ani.save("weights_and_bias_vs_time.gif", writer=writer)
+            ani.save("weights_and_bias_vs_time.gif", writer=animation.PillowWriter(fps=30))
 
 
 
