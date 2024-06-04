@@ -3,6 +3,11 @@ import logging
 import numpy as np
 from tqdm import tqdm
 
+import matplotlib as mpl
+mpl.use("Agg")
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+
 SEED = 1337
 from sklearn.model_selection import train_test_split
 import torch
@@ -26,10 +31,11 @@ def main() -> None:
     )
     ops = options()
     trainer = Trainer(ops.i, int(ops.b))
-    trainer.train()
+    # trainer.train()
+    trainer.plot_vs_time()
     # print the weights after training
-    print("w", trainer.model.net[0].weight)
-    print("b", trainer.model.net[0].bias)
+    # print("w", trainer.model.net[0].weight)
+    # print("b", trainer.model.net[0].bias)
 
 
 def options() -> argparse.Namespace:
@@ -42,14 +48,14 @@ def options() -> argparse.Namespace:
 
 class Trainer:
     def __init__(self, input: str, batch_size: int) -> None:
-        self.model = LayerCalibration(input, batch_size)
-        self.model.to(device)
-        self.criterion = nn.MSELoss()
-        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=0.01, weight_decay=0.01)
+        # self.model = LayerCalibration(input, batch_size)
+        # self.model.to(device)
+        # self.criterion = nn.MSELoss()
+        # self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=0.01, weight_decay=0.01)
         self.n_epochs = 10
         self.wandb = "weights_and_bias.npz"
-        print(self.model.try_summing())
-        print(f"N(parameters): {sum(p.numel() for p in self.model.parameters())}")
+        # print(self.model.try_summing())
+        # print(f"N(parameters): {sum(p.numel() for p in self.model.parameters())}")
 
     def train(self) -> None:
         iter_per_epoch = self.model.n_iter_per_epoch()
@@ -89,6 +95,41 @@ class Trainer:
                 loss += self.criterion(y_pred, y)
             loss /= len(data)
             return loss
+
+    def plot_vs_time(self) -> None:
+        import matplotlib.pyplot as plt
+        data = np.load(self.wandb)
+        weights_vs_time = data["weights_vs_time"]
+        bias_vs_time = data["bias_vs_time"]
+        comb_vs_time = np.concatenate([weights_vs_time, bias_vs_time.reshape(-1, 1)], axis=1)
+        if False:
+            fig, ax = plt.subplots()
+            vals = comb_vs_time[-1]
+            ax.scatter(x=np.arange(len(vals)), y=vals, color='green', marker='o', linestyle="")
+            ax.set_xlabel(f"Weight index (bias is the last one)")
+            ax.set_ylabel(f"Value")
+            plt.savefig("weights_and_bias_vs_time.png")
+        else:
+            # draw animation
+            fig, ax = plt.subplots()
+            (line, ) = ax.plot([], [], color="green", marker="o", linestyle="")
+            ax.set_xlabel(f"Weight index (bias is the last one)")
+            ax.set_ylabel(f"Value")
+            ax.set_xlim(0, comb_vs_time.shape[1])
+            ax.set_ylim(-0.2, 1.2)
+            text = ax.text(0.0, 1.0, "Optimizer step 0", transform=ax.transAxes)
+            speedup = 5
+            def run(iteration):
+                if iteration % 10 == 0:
+                    print(f"iteration = {iteration}")
+                line.set_data(np.arange(len(comb_vs_time[iteration * speedup])), comb_vs_time[iteration * speedup])
+                text.set_text(f"Optimizer step {iteration * speedup}")
+                return (line, )
+            ani = animation.FuncAnimation(fig, run, frames=len(comb_vs_time)//speedup, blit=True)
+            # save as webp file
+            ani.save("weights_and_bias_vs_time.gif", writer="pillow", fps=60)
+
+
 
 class LayerCalibration(nn.Module):
 
