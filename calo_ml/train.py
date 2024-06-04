@@ -47,16 +47,20 @@ class Trainer:
         self.criterion = nn.MSELoss()
         self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=0.01, weight_decay=0.01)
         self.n_epochs = 10
+        self.wandb = "weights_and_bias.npz"
         print(self.model.try_summing())
         print(f"N(parameters): {sum(p.numel() for p in self.model.parameters())}")
 
     def train(self) -> None:
-        for _ in tqdm(range(self.n_epochs)):
-            # print(f"Epoch {epoch}")
+        iter_per_epoch = self.model.n_iter_per_epoch()
+        weights_vs_time = torch.zeros(self.n_epochs * iter_per_epoch, self.model.n_layers(), device=device)
+        bias_vs_time = torch.zeros(self.n_epochs * iter_per_epoch, device=device)
+        for i_epoch in tqdm(range(self.n_epochs)):
             self.model.train()
-            for i, (x, y) in enumerate(self.model.data_train):
-                if i % 10 == 0:
-                    pass # print(f"Batch {i}")
+            for i_batch, (x, y) in enumerate(self.model.data_train):
+                with torch.no_grad():
+                    weights_vs_time[i_epoch * iter_per_epoch + i_batch] = self.model.net[0].weight[0].flatten()
+                    bias_vs_time[i_epoch * iter_per_epoch + i_batch] = self.model.net[0].bias.flatten()
                 x = x.to(device)
                 y = y.to(device)
                 self.optimizer.zero_grad()
@@ -68,6 +72,10 @@ class Trainer:
             train_loss = self.evaluate_loss("train")
             dev_loss = self.evaluate_loss("dev")
             print(f"Train loss = {train_loss:.1f}, dev loss = {dev_loss:.1f}")
+        print(f"Writing weights and bias to npz file")
+        np.savez(self.wandb, weights_vs_time=weights_vs_time.cpu().numpy(), bias_vs_time=bias_vs_time.cpu().numpy())
+        print(weights_vs_time)
+        print(bias_vs_time)
 
     def evaluate_loss(self, name: str) -> None:
         assert name in ["train", "dev"]
@@ -103,6 +111,9 @@ class LayerCalibration(nn.Module):
         )
         logger.info("Net:")
         logger.info(self.net)
+
+    def n_iter_per_epoch(self) -> int:
+        return len(self.data_train)
 
     def n_layers(self) -> int:
         features, label = self.dataset_train[0]
