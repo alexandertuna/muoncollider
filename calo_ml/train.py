@@ -1,4 +1,5 @@
 import argparse
+import glob
 import logging
 import numpy as np
 from tqdm import tqdm
@@ -9,11 +10,12 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from matplotlib.backends.backend_pdf import PdfPages
 
-SEED = 42 # 1337
+SEED = 420 # 1337
 from sklearn.model_selection import train_test_split
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset
+from torch.utils.data import IterableDataset
 from torch.utils.data import DataLoader
 torch.manual_seed(SEED)
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -319,6 +321,23 @@ class ParticleDataset(Dataset):
 
     def __getitem__(self, idx):
         return self.features[idx], self.labels[idx]
+
+
+class ParticleDatasetIterable(IterableDataset):
+    def __init__(self, data_location: str, shuffle: bool = True):
+        self.data_location = data_location
+        self.shuffle = shuffle
+
+    def __iter__(self):
+        paths = glob.glob(self.data_location)
+        for path in paths:
+            with np.load(path) as fi:
+                features, labels = fi["features"], fi["labels"]
+                its = range(len(features))
+                if self.shuffle:
+                    its = np.random.permutation(its)
+                for it in its:
+                    yield features[it], labels[it]
 
 
 if __name__ == "__main__":
