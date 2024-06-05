@@ -7,6 +7,7 @@ import matplotlib as mpl
 mpl.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+from matplotlib.backends.backend_pdf import PdfPages
 
 SEED = 42 # 1337
 from sklearn.model_selection import train_test_split
@@ -30,12 +31,12 @@ def main() -> None:
         level=logging.DEBUG,
     )
     ops = options()
+    no_calib = NoCalibration(ops.i)
+    # no_calib.plot()
+    global_calib = GlobalCalibration(ops.i)
     trainer = Trainer(ops.i, int(ops.b), int(ops.e))
-    # trainer.train()
+    trainer.train()
     trainer.plot_vs_time()
-    # print the weights after training
-    # print("w", trainer.model.net[0].weight)
-    # print("b", trainer.model.net[0].bias)
 
 
 def options() -> argparse.Namespace:
@@ -47,6 +48,121 @@ def options() -> argparse.Namespace:
     parser.add_argument("-e", help="Epochs for training", default=16)
     return parser.parse_args()
 
+
+class GlobalCalibration:
+    def __init__(self, input: str) -> None:
+        self.input = input
+        self.load_data()
+        self.train()
+
+    def load_data(self) -> None:
+        logger.info("Loading data ...")
+        inp = np.load(self.input)
+        self.features = inp["features"].sum(axis=(1, 2, 3)).flatten()
+        self.labels = inp["labels"].flatten()
+        logger.info(f"Features: {self.features.shape}")
+        logger.info(f"Labels: {self.labels.shape}")
+
+    def train(self) -> None:
+        alpha = np.linspace(0.5, 1.5, 201)
+        beta = np.linspace(-20, 20, 201)
+        features = self.features[..., np.newaxis, np.newaxis]
+        labels = self.labels[..., np.newaxis, np.newaxis]
+        alpha2d, beta2d = np.meshgrid(alpha, beta)
+        features2d = features * alpha2d + beta2d
+        mse = ((features2d - labels) ** 2).mean(axis=0)
+
+        the_min = np.unravel_index(mse.argmin(), mse.shape)
+        mse_min = mse[the_min]
+        alpha_min = alpha2d[the_min]
+        beta_min = beta2d[the_min]
+
+        fig, ax = plt.subplots()
+        hist, xedges, yedges, im = ax.hist2d(
+            x=alpha2d.flatten(),
+            y=beta2d.flatten(),
+            weights=mse.flatten(),
+            bins=[alpha, beta],
+            cmap="viridis",
+            norm="log",
+        )
+        ax.scatter([alpha_min], [beta_min], s=100, marker="o", facecolors='none', edgecolors='r')
+        cbar = fig.colorbar(im, ax=ax)
+        ax.set_xlabel("alpha")
+        ax.set_ylabel("beta")
+        cbar.set_label("Mean squared error [GeV^2]")
+        plt.savefig("global_calibration.pdf")
+
+    def plot(self) -> None:
+        pl = Plotter("global_calibration.pdf", self.labels, self.features)
+        pl.plot()
+
+
+class NoCalibration:
+    def __init__(self, input: str) -> None:
+        self.input = input
+        self.load_data()
+        self.train()
+
+    def load_data(self) -> None:
+        logger.info("Loading data ...")
+        inp = np.load(self.input)
+        self.features = inp["features"].sum(axis=(1, 2, 3)).flatten()
+        self.labels = inp["labels"].flatten()
+        logger.info(f"Features: {self.features.shape}")
+        logger.info(f"Labels: {self.labels.shape}")
+
+    def train(self) -> None:
+        diff = self.features - self.labels
+        mse = (diff ** 2).mean()
+        logger.info(f"Mean squared error: {mse}")
+
+    def plot(self) -> None:
+        pl = Plotter("no_calibration.pdf", self.labels, self.features)
+        pl.plot()
+
+
+
+
+class Plotter:
+    def __init__(self, output: str, y_true: np.ndarray, y_pred: np.ndarray) -> None:
+        self.output = output
+        self.y_true = y_true
+        self.y_pred = y_pred
+        self.y_diff = y_true - y_pred
+
+    def plot(self) -> None:
+        with PdfPages(self.output) as pdf:
+            self.plot_truth_vs_reco(pdf)
+            self.plot_truth_vs_squared_error(pdf)
+
+    def plot_truth_vs_reco(self, pdf: PdfPages) -> None:
+        fig, ax = plt.subplots()
+        bins = np.linspace(0, 550, 100)
+        hist, xedges, yedges, im = ax.hist2d(self.y_true, self.y_pred, bins=[bins, bins], cmin=0.5, cmap="viridis")
+        cbar = fig.colorbar(im, ax=ax)
+        ax.plot([0, 550], [0, 550], color="red", linestyle="--", linewidth=1)
+        ax.grid()
+        ax.set_axisbelow(True)
+        ax.set_xlabel("Truth energy")
+        ax.set_ylabel("Reconstructed energy")
+        pdf.savefig()
+        plt.close()
+
+    def plot_truth_vs_squared_error(self, pdf: PdfPages) -> None:
+        fig, ax = plt.subplots()
+        bins = np.linspace(0, 550, 50), np.linspace(0, 200, 50)
+        hist, xedges, yedges, im = ax.hist2d(self.y_true, self.y_diff ** 2, bins=bins, cmin=-0.1, cmap="viridis")
+        cbar = fig.colorbar(im, ax=ax)
+        ax.plot(bins[0][:-1], np.quantile(hist, 0.9, axis=1), color="red", marker="_", linestyle="None")
+        ax.grid()
+        ax.set_axisbelow(True)
+        ax.set_xlabel("Truth energy")
+        ax.set_ylabel("(Truth - Reconstructed energy) ^ 2")
+        pdf.savefig()
+        plt.close()
+
+
 class Trainer:
     def __init__(self, input: str, batch_size: int, epochs: int) -> None:
         self.model = LayerCalibration(input, batch_size)
@@ -55,8 +171,7 @@ class Trainer:
         self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=0.01, weight_decay=0.001)
         self.n_epochs = epochs
         self.wandb = "weights_and_bias.npz"
-        print(self.model.try_summing())
-        print(f"N(parameters): {sum(p.numel() for p in self.model.parameters())}")
+        logger.info(f"N(parameters): {sum(p.numel() for p in self.model.parameters())}")
 
     def train(self) -> None:
         iter_per_epoch = self.model.n_iter_per_epoch()
@@ -78,11 +193,11 @@ class Trainer:
             self.model.eval()
             train_loss = self.evaluate_loss("train")
             dev_loss = self.evaluate_loss("dev")
-            print(f"Train loss = {train_loss:.1f}, dev loss = {dev_loss:.1f}")
-        print(f"Writing weights and bias to npz file")
+            logger.info(f"Train loss = {train_loss:.1f}, dev loss = {dev_loss:.1f}")
+        logger.info(f"Writing weights and bias to npz file")
         np.savez(self.wandb, weights_vs_time=weights_vs_time.cpu().numpy(), bias_vs_time=bias_vs_time.cpu().numpy())
-        print(weights_vs_time)
-        print(bias_vs_time)
+        logger.info(weights_vs_time)
+        logger.info(bias_vs_time)
 
     def evaluate_loss(self, name: str) -> None:
         assert name in ["train", "dev"]
@@ -124,7 +239,7 @@ class Trainer:
             speedup = 10
             def run(iteration):
                 if iteration % 10 == 0:
-                    print(f"iteration = {iteration}")
+                    logger.info(f"iteration = {iteration}")
                 line.set_data(np.arange(len(comb_vs_time[iteration * speedup])), comb_vs_time[iteration * speedup])
                 text.set_text(f"Optimizer step {iteration * speedup}")
                 return (line, )
@@ -145,11 +260,6 @@ class LayerCalibration(nn.Module):
         explode = 4
         # how can I initialize weights to 1?
         self.net = nn.Sequential(
-            # nn.Linear(layers, layers * explode),
-            # nn.ReLU(),
-            # nn.Linear(layers * explode, layers * explode),
-            # nn.ReLU(),
-            # nn.Linear(layers * explode, 1),
             nn.Linear(layers, 1),
         )
         logger.info("Net:")
