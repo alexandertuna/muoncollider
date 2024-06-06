@@ -3,6 +3,7 @@ import glob
 import logging
 import numpy as np
 from tqdm import tqdm
+from typing import List
 
 import matplotlib as mpl
 mpl.use("Agg")
@@ -24,6 +25,8 @@ print(f"device = {device}")
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
 
+E_MAX = 500
+CMAP = "hot"
 
 def main() -> None:
     logging.basicConfig(
@@ -33,37 +36,64 @@ def main() -> None:
         level=logging.DEBUG,
     )
     ops = options()
-    no_calib = NoCalibration(ops.i)
-    # no_calib.plot()
-    global_calib = GlobalCalibration(ops.i)
-    trainer = Trainer(ops.i, int(ops.b), int(ops.e))
-    trainer.train()
-    trainer.plot_vs_time()
+    files = get_files(ops.i, int(ops.n))
+    no_calib = NoCalibration(files)
+    no_calib.plot()
+    global_calib = GlobalCalibration(files)
+    global_calib.plot()
+    # trainer = Trainer(ops.i, int(ops.b), int(ops.e))
+    # trainer.train()
+    # trainer.plot_vs_time()
 
 
 def options() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         usage=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument("-i", help="Input filename with features and labels", default="data.npz")
+    parser.add_argument("-i", help="Input file(s) with features and labels. Wildcards allowed", default="data.npz")
+    parser.add_argument("-n", help="Maximum number of input files to consider", default=0)
     parser.add_argument("-b", help="Batch size", default=32)
     parser.add_argument("-e", help="Epochs for training", default=16)
     return parser.parse_args()
 
 
+def get_files(input: str, n: int) -> List[str]:
+    files = glob.glob(input)
+    if len(files) == 0:
+        raise Exception(f"No files found: {input}")
+    if n > 0:
+        return files[:n]
+    return files
+
+
+def load_key(fnames: List[str], key: str) -> np.ndarray:
+    return np.concatenate([load_key_one_file(fname, key) for fname in fnames])
+
+
+def load_key_one_file(fname: str, key: str) -> np.ndarray:
+    with np.load(fname) as fi:
+        if key == "features":
+            print(f"Loading {fname} ...")
+            return fi[key].sum(axis=(1, 2, 3)).flatten()
+        elif key == "labels":
+            return fi[key].flatten()
+        raise Exception(f"Unknown key: {key}")
+
+
 class GlobalCalibration:
-    def __init__(self, input: str) -> None:
-        self.input = input
+    def __init__(self, inputs: List[str]) -> None:
+        self.inputs = inputs
         self.load_data()
         self.train()
 
     def load_data(self) -> None:
         logger.info("Loading data ...")
-        inp = np.load(self.input)
-        self.features = inp["features"].sum(axis=(1, 2, 3)).flatten()
-        self.labels = inp["labels"].flatten()
+        self.features = load_key(self.inputs, "features")
+        self.labels = load_key(self.inputs, "labels")
         logger.info(f"Features: {self.features.shape}")
         logger.info(f"Labels: {self.labels.shape}")
+        self.alpha = 1.0
+        self.beta = 0.0
 
     def train(self) -> None:
         alpha = np.linspace(0.5, 1.5, 201)
@@ -78,6 +108,8 @@ class GlobalCalibration:
         mse_min = mse[the_min]
         alpha_min = alpha2d[the_min]
         beta_min = beta2d[the_min]
+        self.alpha = alpha_min
+        self.beta = beta_min
 
         fig, ax = plt.subplots()
         hist, xedges, yedges, im = ax.hist2d(
@@ -85,7 +117,7 @@ class GlobalCalibration:
             y=beta2d.flatten(),
             weights=mse.flatten(),
             bins=[alpha, beta],
-            cmap="viridis",
+            cmap=CMAP,
             norm="log",
         )
         ax.scatter([alpha_min], [beta_min], s=100, marker="o", facecolors='none', edgecolors='r')
@@ -93,24 +125,26 @@ class GlobalCalibration:
         ax.set_xlabel("alpha")
         ax.set_ylabel("beta")
         cbar.set_label("Mean squared error [GeV^2]")
-        plt.savefig("global_calibration.pdf")
+        plt.savefig("global_calibration_scan.pdf")
 
     def plot(self) -> None:
-        pl = Plotter("global_calibration.pdf", self.labels, self.features)
+        pl = Plotter("global_calibration.pdf", self.labels, self.features * self.alpha + self.beta)
         pl.plot()
 
 
 class NoCalibration:
-    def __init__(self, input: str) -> None:
-        self.input = input
+    def __init__(self, inputs: str) -> None:
+        self.inputs = inputs
         self.load_data()
         self.train()
 
     def load_data(self) -> None:
-        logger.info("Loading data ...")
-        inp = np.load(self.input)
-        self.features = inp["features"].sum(axis=(1, 2, 3)).flatten()
-        self.labels = inp["labels"].flatten()
+        logger.info("Loading data from files ...")
+        self.features = load_key(self.inputs, "features")
+        self.labels = load_key(self.inputs, "labels")
+        # fnames = glob.glob("/work/tuna/data/2024_05_31/*npz")
+        # self.features = load_key(fnames, "features") # np.concatenate([load_key(fname, "features") for fname in fnames])
+        # self.labels = load_key(fnames, "labels") # np.concatenate([load_key(fname, "labels") for fname in fnames])
         logger.info(f"Features: {self.features.shape}")
         logger.info(f"Labels: {self.labels.shape}")
 
@@ -131,36 +165,70 @@ class Plotter:
         self.output = output
         self.y_true = y_true
         self.y_pred = y_pred
-        self.y_diff = y_true - y_pred
+        self.y_diff = y_pred - y_true
 
     def plot(self) -> None:
         with PdfPages(self.output) as pdf:
             self.plot_truth_vs_reco(pdf)
+            self.plot_truth_vs_error(pdf)
+            self.plot_truth_vs_error_ratio(pdf)
             self.plot_truth_vs_squared_error(pdf)
 
     def plot_truth_vs_reco(self, pdf: PdfPages) -> None:
-        fig, ax = plt.subplots()
-        bins = np.linspace(0, 550, 100)
-        hist, xedges, yedges, im = ax.hist2d(self.y_true, self.y_pred, bins=[bins, bins], cmin=0.5, cmap="viridis")
+        fig, ax = plt.subplots(figsize=(5, 4))
+        bins = np.linspace(0, E_MAX * 1.1, 100)
+        hist, xedges, yedges, im = ax.hist2d(self.y_true, self.y_pred, bins=[bins, bins], cmin=0.5, cmap=CMAP)
         cbar = fig.colorbar(im, ax=ax)
-        ax.plot([0, 550], [0, 550], color="red", linestyle="--", linewidth=1)
+        cbar.set_label("Events")
+        ax.plot([0, E_MAX * 1.1], [0, E_MAX * 1.1], color="gray", linestyle="--", linewidth=1)
         ax.grid()
         ax.set_axisbelow(True)
-        ax.set_xlabel("Truth energy")
-        ax.set_ylabel("Reconstructed energy")
+        ax.set_xlabel("Truth energy [GeV]")
+        ax.set_ylabel("Reconstructed energy [GeV]")
+        fig.subplots_adjust(bottom=0.12, left=0.15, right=0.95, top=0.95)
+        pdf.savefig()
+        plt.close()
+
+    def plot_truth_vs_error(self, pdf: PdfPages) -> None:
+        fig, ax = plt.subplots(figsize=(5, 4))
+        bins = np.linspace(0, E_MAX * 1.1, 50), np.linspace(-15, 15, 50)
+        _, _, _, im = ax.hist2d(self.y_true, self.y_diff, bins=bins, cmin=0.5, cmap=CMAP)
+        cbar = fig.colorbar(im, ax=ax)
+        cbar.set_label("Events")
+        ax.grid()
+        ax.set_axisbelow(True)
+        ax.set_xlabel("Truth energy [GeV]")
+        ax.set_ylabel("Reconstructed - truth energy [GeV]")
+        fig.subplots_adjust(bottom=0.12, left=0.15, right=0.95, top=0.95)
+        pdf.savefig()
+        plt.close()
+
+    def plot_truth_vs_error_ratio(self, pdf: PdfPages) -> None:
+        fig, ax = plt.subplots(figsize=(5, 4))
+        bins = np.linspace(0, E_MAX * 1.1, 50), np.linspace(-10, 10, 50)
+        _, _, _, im = ax.hist2d(self.y_true, 100 * self.y_diff / self.y_true, bins=bins, cmin=0.5, cmap=CMAP)
+        cbar = fig.colorbar(im, ax=ax)
+        cbar.set_label("Events")
+        ax.grid()
+        ax.set_axisbelow(True)
+        ax.set_xlabel("Truth energy [GeV]")
+        ax.set_ylabel("100 * (Reconstructed - truth energy) / Truth")
+        fig.subplots_adjust(bottom=0.12, left=0.15, right=0.95, top=0.95)
         pdf.savefig()
         plt.close()
 
     def plot_truth_vs_squared_error(self, pdf: PdfPages) -> None:
-        fig, ax = plt.subplots()
-        bins = np.linspace(0, 550, 50), np.linspace(0, 200, 50)
-        hist, xedges, yedges, im = ax.hist2d(self.y_true, self.y_diff ** 2, bins=bins, cmin=-0.1, cmap="viridis")
+        fig, ax = plt.subplots(figsize=(5, 4))
+        bins = np.linspace(0, E_MAX * 1.1, 50), np.linspace(0, 200, 50)
+        hist, xedges, yedges, im = ax.hist2d(self.y_true, self.y_diff ** 2, bins=bins, cmin=-0.1, cmap=CMAP)
         cbar = fig.colorbar(im, ax=ax)
+        cbar.set_label("Events")
         ax.plot(bins[0][:-1], np.quantile(hist, 0.9, axis=1), color="red", marker="_", linestyle="None")
         ax.grid()
         ax.set_axisbelow(True)
-        ax.set_xlabel("Truth energy")
-        ax.set_ylabel("(Truth - Reconstructed energy) ^ 2")
+        ax.set_xlabel("Truth energy [GeV]")
+        ax.set_ylabel("(Truth - Reconstructed energy) ^ 2 [GeV ^ 2]")
+        fig.subplots_adjust(bottom=0.12, left=0.15, right=0.95, top=0.95)
         pdf.savefig()
         plt.close()
 
