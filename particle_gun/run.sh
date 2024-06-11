@@ -1,4 +1,4 @@
-EVENTS="2000"
+EVENTS="2"
 PARTICLE="photon"
 PDGID="22"
 # PARTICLE="neutron"
@@ -33,8 +33,10 @@ time python ${CODE}/mucoll-benchmarks/generation/pgun/pgun_lcio.py -o -e ${EVENT
 time ddsim --steeringFile ${CODE}/mucoll-benchmarks/simulation/ilcsoft/steer_baseline.py --inputFile ${GEN} --outputFile ${SIM} || return
 # time ddsim --inputFile ${GEN} --steeringFile /code/SteeringMacros/Sim/sim_steer_GEN_CONDOR.py --outputFile ${SIM}
 
-time k4run ./steer_reco_CONDOR.py || return
+time k4run ./steer_reco_CONDOR.py # || return
+# https://github.com/key4hep/k4FWCore/issues/125
 # time k4run ${CODE}/SteeringMacros/k4Reco/steer_reco_CONDOR.py || return
 # time Marlin --global.LCIOInputFiles=${SIM} --DD4hep.DD4hepXMLFile=${MUCOLL_GEO} ../mucoll-benchmarks/digitisation/marlin/digi_steer.xml
 
 echo "rm -f ${SIM}"
+rm -f ${SIM}
