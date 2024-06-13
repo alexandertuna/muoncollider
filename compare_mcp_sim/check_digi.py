@@ -1,5 +1,6 @@
-import pyLCIO # type: ignore
+import pyLCIO  # type: ignore
 from collections.abc import Sized
+
 
 def main() -> None:
     fname = "/data/fmeloni/DataMuC_MuColl10_v0A/v2/reco/neutronGun_E_250_1000/neutronGun_E_250_1000_reco_10000.slcio"
@@ -17,10 +18,12 @@ def main() -> None:
         print(f"len(hcals_e): {len(hcals_e)}")
         break
 
+
 def getCollection(event: pyLCIO.EVENT.LCEvent, name: str) -> Sized:
     if name in event.getCollectionNames():
         return event.getCollection(name)
     return []
+
 
 if __name__ == "__main__":
     main()
