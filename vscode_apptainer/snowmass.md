@@ -1,6 +1,6 @@
 # Intro
 
-Here are tips on using VSCode within apptainer, with the specific example of the snowmass machine.
+Here are tips on using VSCode within apptainer running on a remote connection, with the specific example of the snowmass machine.
 
 NB: My connection is called `k4toroid_snowmass`, but you can call it whatever you like.
 
