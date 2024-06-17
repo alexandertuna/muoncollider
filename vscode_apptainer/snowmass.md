@@ -1,6 +1,13 @@
+# Intro
+
+Here are tips on using VSCode within apptainer, with the specific example of the snowmass machine.
+
+NB: My connection is called `k4toroid_snowmass`, but you can call it whatever you like, of course.
+
 # Links
 
 - https://github.com/microsoft/vscode-remote-release/issues/3066
+- https://linuxize.com/post/using-the-ssh-config-file/
 
 # Laptop
 
@@ -14,6 +21,11 @@ Host snowmass k4toroid_snowmass
   HostName login.snowmass21.io
   User tuna
 ```
+
+The key is `RemoteCommand`, which can execute a command upon login. The other lines are hopefully self-explanatory.
+
+You can check if this works by running `ssh k4toroid_snowmass` from the command line. If successful, it should log into snowmass and immediately start `apptainer`.
+
 
 # snowmass
 
@@ -30,4 +42,9 @@ fi
 
 This sets up the mucoll-stack software whenever the apptainer environment starts, including for VSCode.
 
+# VSCode
+
+- Install the `Remote - SSH` extension
+- In Settings, enable "Remote.SSH: Enable Remote Command" (`remote.SSH.enableRemoteCommand`)
+- `Connect to...` -> `Connect to Host` -> `k4toroid_snowmass`
 
