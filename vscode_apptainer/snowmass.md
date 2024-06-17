@@ -1,10 +1,8 @@
-# snowmass (`login.snowmass21.io`)
-
-## Links
+# Links
 
 - https://github.com/microsoft/vscode-remote-release/issues/3066
 
-## Laptop
+# Laptop
 
 On my laptop, in the `${HOME}/.ssh/config` file, I added:
 
@@ -17,7 +15,7 @@ Host snowmass k4toroid_snowmass
   User tuna
 ```
 
-## On snowmass
+# snowmass
 
 On `login.snowmass21.io`, in the `${HOME}/.bashrc` file, I added:
 
