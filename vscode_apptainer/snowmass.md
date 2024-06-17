@@ -21,7 +21,6 @@ On `login.snowmass21.io`, in the `${HOME}/.bashrc` file, I added:
 
 ```
 if [ "$APPTAINER_NAME" == "k4toroid.sif" ]; then
-    echo 'Setting up apptainer environment ...'
     source /opt/spack/share/spack/setup-env.sh
     spack env activate -V k4prod
     source /opt/spack/opt/spack/linux-ubuntu22.04-x86_64/gcc-11.3.0/mucoll-stack-2023-07-30-ysejlaccel4azxh3bxzsdb7asuzxbfof/setup.sh
