@@ -47,3 +47,32 @@ This sets up the mucoll-stack software whenever the apptainer environment starts
 - In Settings, enable "Remote.SSH: Enable Remote Command" (`remote.SSH.enableRemoteCommand`)
 - `Connect to...` -> `Connect to Host` -> `k4toroid_snowmass`
 
+# Devlin and Singularity
+
+If you're using Singularity, there are a few small differences relative to apptainer. They can be addressed with two changes:
+
+```
+# From:
+RemoteCommand apptainer run ...
+
+# To:
+RemoteCommand singularity run -B /collab/project/snowmass21/data/muonc:/data -B /work/$USER /cvmfs/unpacked.cern.ch/registry.hub.docker.com/infnpd/mucoll-ilc-framework:1.6-centos8
+
+# or your favorite command to set up singularity
+```
+
+```
+# From:
+if [ "$APPTAINER_NAME" == "k4toroid.sif" ]; then
+    source /opt/spack/share/spack/setup-env.sh
+    spack env activate -V k4prod
+    source /opt/spack/opt/spack/linux-ubuntu22.04-x86_64/gcc-11.3.0/mucoll-stack-2023-07-30-ysejlaccel4azxh3bxzsdb7asuzxbfof/setup.sh
+    export MARLIN_DLL=$MARLIN_DLL:/opt/MyBIBUtils/lib/libMyBIBUtils.so
+fi
+
+# To:
+if [ "$SINGULARITY_NAME" == 'mucoll-ilc-framework:1.6-centos8' ]; then
+    source /opt/ilcsoft/muonc/init_ilcsoft.sh
+    # or your favorite command to setup software
+fi
+```
