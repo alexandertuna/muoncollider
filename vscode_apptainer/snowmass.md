@@ -24,10 +24,9 @@ Host snowmass k4toroid_snowmass
 
 The key is `RemoteCommand`, which can execute a command upon login. The other lines are hopefully self-explanatory.
 
-You can check if this works by running `ssh k4toroid_snowmass` from the command line. If successful, it should log into snowmass and immediately start `apptainer`.
+You can check if this works by running `ssh k4toroid_snowmass` from the command line. If successful, it should log into snowmass and immediately start `apptainer`. If that doesn't work, you can also try running `ssh snowmass` to see if a connection without `RemoteCommand` works.
 
-
-# snowmass
+# Snowmass
 
 On `login.snowmass21.io`, in the `${HOME}/.bashrc` file, I added:
 
