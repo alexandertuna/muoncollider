@@ -4,11 +4,13 @@ import argparse
 import pandas as pd
 
 import matplotlib as mpl
-mpl.use('Agg')
+
+mpl.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
 COL_NAME = "ECalEndcapCollection"
+
 
 def main():
     ops = options()
@@ -33,14 +35,12 @@ class LayerPlotter:
         self.layer = layer
         self.pdfname = pdfname
 
-
     def plot(self) -> None:
         with PdfPages(self.pdfname) as pdf:
             for event in self.reader:
                 df = EventDecoder(event).data
                 self.plot_event(df, pdf)
                 break
-
 
     def plot_event(self, df: pd.DataFrame, pdf: PdfPages) -> None:
         layer = df[df["hit_layer"] == self.layer]
@@ -89,9 +89,6 @@ class EventDecoder:
     def mask(self, nbits: int) -> int:
         """e.g. mask(4) returns 0b1111"""
         return (1 << nbits) - 1
-
-
-
 
 
 if __name__ == "__main__":
