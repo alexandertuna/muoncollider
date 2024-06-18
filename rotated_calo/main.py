@@ -1,13 +1,13 @@
-import pyLCIO
+import pyLCIO # type: ignore
 
 import argparse
 import pandas as pd
 
-import matplotlib as mpl
+import matplotlib as mpl # type: ignore
 
 mpl.use("Agg")
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_pdf import PdfPages
+import matplotlib.pyplot as plt # type: ignore
+from matplotlib.backends.backend_pdf import PdfPages # type: ignore
 
 COL_NAME = "ECalEndcapCollection"
 
@@ -29,7 +29,7 @@ def options() -> argparse.Namespace:
 
 
 class LayerPlotter:
-    def __init__(self, filename: str, pdfname: str, layer: int):
+    def __init__(self, filename: str, pdfname: str, layer: int) -> None:
         self.reader = pyLCIO.IOIMPL.LCFactory.getInstance().createLCReader()
         self.reader.open(filename)
         self.layer = layer
