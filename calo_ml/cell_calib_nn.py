@@ -27,7 +27,7 @@ logger.addHandler(logging.StreamHandler())
 
 E_MAX = 500
 CMAP = "hot"
-LAYER_CHUNKS = 5
+LAYER_CHUNKS = 10
 
 def main() -> None:
     logging.basicConfig(
@@ -92,7 +92,8 @@ class Trainer:
         self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=0.005, weight_decay=0.001)
         self.n_epochs = epochs
         self.n_frame_skip = 10
-        logger.info(f"N(parameters): {sum(p.numel() for p in self.model.parameters())}")
+        self.n_params = sum(p.numel() for p in self.model.parameters())
+        logger.info(f"N(parameters): {self.n_params:_}")
 
     def train(self) -> None:
         for i_epoch in tqdm(range(self.n_epochs)):
@@ -135,12 +136,15 @@ class LayerCalibration(nn.Module):
         # pixels = self.n_pixels()
         # logger.info(f"Layers: {layers}, pixels: {pixels}")
         features = self.n_features()
+        dropout = 0.01
         logger.info(f"Features: {features}")
         self.net = nn.Sequential(
             nn.Linear(features, features // 10),
             nn.ReLU(),
+            nn.Dropout(dropout),
             nn.Linear(features // 10, features // 100),
             nn.ReLU(),
+            nn.Dropout(dropout),
             nn.Linear(features // 100, 1),
         )
         logger.info("Net:")
