@@ -12,10 +12,19 @@ import pandas as pd
 from dataclasses import dataclass
 from tqdm import tqdm
 
-from typing import Any, List, Tuple
+from typing import List, Tuple
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
+
+
+@dataclass(frozen=True)
+class TruthParticle:
+    px: float
+    py: float
+    pz: float
+    e: float
+    pdgid: int
 
 
 def options() -> argparse.Namespace:
@@ -56,7 +65,7 @@ class ProcessLcioToFlat:
         logger.info(f"Merging events into a DataFrame ...")
         self.df = pd.concat([pd.DataFrame(res) for res in results])
 
-    def read_event(self, event: Any) -> dict:
+    def read_event(self, event: pyLCIO.EVENT.LCEvent) -> dict:
         d = self.default_dict()
         truth = self.read_event_truth(event)
         event_number = event.getEventNumber()
@@ -83,7 +92,7 @@ class ProcessLcioToFlat:
                 d["truth_pdgid"].append(truth.pdgid)
         return d
 
-    def read_event_truth(self, event: Any):
+    def read_event_truth(self, event: pyLCIO.EVENT.LCEvent) -> TruthParticle:
         event_number = event.getEventNumber()
         n_stable = 0
         for obj in event.getCollection(collection_names.mc):
@@ -119,14 +128,6 @@ class ProcessLcioToFlat:
             "truth_pdgid": [],
         }
 
-
-@dataclass(frozen=True)
-class TruthParticle:
-    px: float
-    py: float
-    pz: float
-    e: float
-    pdgid: int
 
 # Constants: collection names
 @dataclass(frozen=True)
