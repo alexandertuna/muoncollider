@@ -19,6 +19,7 @@ A few python modules are installed as user packages:
 python -m pip install mypy
 python -m pip install pyarrow
 python -m pip install pandas-stubs
+python -m pip install types-tqdm
 python -m pip install plotly
 python -m pip install tqdm
 python -m pip install ffmpeg
