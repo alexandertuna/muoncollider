@@ -103,7 +103,7 @@ class LayerPlotter:
         ax.set_axisbelow(True)
         ax.tick_params(top=True, right=True)
         if one_event:
-            ax.set_title(f"Event {int(event)}, layer {self.layer}")
+            ax.set_title(f"Layer {self.layer}")
             ax.set_xlim([-75, 75])
             ax.set_ylim([800, 1000])
         else:
