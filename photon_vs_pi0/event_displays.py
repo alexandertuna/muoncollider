@@ -36,6 +36,7 @@ class EventDisplays:
         self.output_file = output_file
         self.n_events = n_events
         self.df = pd.read_parquet(input_file)
+        self.pdgid = self.df["truth_pdgid"].median()
         print(self.df.describe())
 
 
@@ -77,8 +78,16 @@ class EventDisplays:
         ax.grid(linewidth=0.1)
         ax.set_axisbelow(True)
         ax.tick_params(right=True, top=True)
-        ax.text(0.100, 1.02, f"Event {event}, Layer {layer}", transform=ax.transAxes)
+        ax.text(0.100, 1.02, f"{particle.name[self.pdgid]}, Event {event}, Layer {layer}", transform=ax.transAxes)
         ax.text(0.956, 1.02, f"E [log(GeV)]", transform=ax.transAxes)
+
+
+@dataclass(frozen=True)
+class particle:
+    name = {
+        22: "Photon",
+        111: "Pi0",
+    }
 
 
 @dataclass(frozen=True)
