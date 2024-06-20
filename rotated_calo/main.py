@@ -1,4 +1,4 @@
-import pyLCIO # type: ignore
+import pyLCIO  # type: ignore
 
 import argparse
 from dataclasses import dataclass
@@ -10,11 +10,11 @@ import os
 from typing import List
 from tqdm import tqdm
 
-import matplotlib as mpl # type: ignore
+import matplotlib as mpl  # type: ignore
 
 mpl.use("Agg")
-import matplotlib.pyplot as plt # type: ignore
-from matplotlib.backends.backend_pdf import PdfPages # type: ignore
+import matplotlib.pyplot as plt  # type: ignore
+from matplotlib.backends.backend_pdf import PdfPages  # type: ignore
 
 COL_NAME = "ECalEndcapCollection"
 INNER_RADIUS = 310.0
@@ -27,6 +27,7 @@ SIDE_A = 1
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
+
 
 def main():
     logging.basicConfig(
@@ -88,7 +89,11 @@ class LayerPlotter:
 
     def plot_layer(self, df: pd.DataFrame, pdf: PdfPages, one_event: bool) -> None:
         logger.info(f"Plotting df with {len(df)} hits ... ")
-        layer = df[(df["hit_layer"] == self.layer) & (df["hit_system"] == systems.ecal_endcap) & (df["hit_side"] == 1)]
+        layer = df[
+            (df["hit_layer"] == self.layer)
+            & (df["hit_system"] == systems.ecal_endcap)
+            & (df["hit_side"] == 1)
+        ]
         fig, ax = plt.subplots(figsize=(4, 4))
         s = 20 if one_event else 0.05
         ax.scatter(layer["hit_x"], layer["hit_y"], s=s, linewidth=0)
@@ -111,19 +116,32 @@ class LayerPlotter:
             circle2 = plt.Circle((0, 0), OUTER_RADIUS, color="black", fill=False)
             ax.add_artist(circle1)
             ax.add_artist(circle2)
-            for (_, group) in layer.groupby("event"):
+            for _, group in layer.groupby("event"):
                 if len(group) < MIN_HITS:
                     continue
-                circle = plt.Circle((group["hit_x"].median(), group["hit_y"].median()), PARTICLE_RADIUS, color="red", fill=False)
+                circle = plt.Circle(
+                    (group["hit_x"].median(), group["hit_y"].median()),
+                    PARTICLE_RADIUS,
+                    color="red",
+                    fill=False,
+                )
                 ax.add_artist(circle)
-        fig.subplots_adjust(bottom=0.12, left=(0.17 if one_event else 0.21), right=0.95, top=0.93)
+        fig.subplots_adjust(
+            bottom=0.12, left=(0.17 if one_event else 0.21), right=0.95, top=0.93
+        )
         pdf.savefig(fig)
         plt.close(fig)
 
-
     def plot_inner_radius(self, df: pd.DataFrame, pdf: PdfPages) -> None:
         logger.info("Plotting corner ... ")
-        subset = df[(df["hit_system"] == systems.ecal_endcap) & (df["hit_side"] == SIDE_A) & (df["hit_x"] < CORNER_MAX) & (df["hit_y"] < CORNER_MAX) & (df["hit_x"] >= CORNER_MIN) & (df["hit_y"] >= CORNER_MIN)]
+        subset = df[
+            (df["hit_system"] == systems.ecal_endcap)
+            & (df["hit_side"] == SIDE_A)
+            & (df["hit_x"] < CORNER_MAX)
+            & (df["hit_y"] < CORNER_MAX)
+            & (df["hit_x"] >= CORNER_MIN)
+            & (df["hit_y"] >= CORNER_MIN)
+        ]
         subset = subset[["hit_x", "hit_y"]].drop_duplicates()
         fig, ax = plt.subplots(figsize=(4, 4))
         ax.scatter(subset["hit_x"], subset["hit_y"], s=2.0, linewidth=0)
@@ -173,6 +191,7 @@ class EventDecoder:
         """e.g. mask(4) returns 0b1111"""
         return (1 << nbits) - 1
 
+
 @dataclass(frozen=True)
 class systems:
     ecal_barrel = 20
@@ -184,6 +203,7 @@ class systems:
     ecal = [ecal_barrel, ecal_endcap]
     hcal = [hcal_barrel, hcal_endcap]
     yoke = [yoke_barrel, yoke_endcap]
+
 
 if __name__ == "__main__":
     main()
