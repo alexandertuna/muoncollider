@@ -1,14 +1,14 @@
-EVENTS="5"
-# PARTICLE="pi0"
-# PDGID="111"
-PARTICLE="photon"
-PDGID="22"
+EVENTS="1000"
+PARTICLE="pi0"
+PDGID="111"
+# PARTICLE="photon"
+# PDGID="22"
 # PARTICLE="neutron"
 # PDGID="2112"
 # ENERGY="50 500"
 ENERGY="100"
 THETA=20
-PHI=90
+PHI=0
 
 NOW=$(date +%Y_%m_%d_%Hh%Mm%Ss)
 
