@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import logging
 import os
+import time
 from typing import List
 from tqdm import tqdm
 
@@ -16,7 +17,11 @@ mpl.use("Agg")
 import matplotlib.pyplot as plt  # type: ignore
 from matplotlib.backends.backend_pdf import PdfPages  # type: ignore
 
-COL_NAME = "ECalEndcapCollection"
+NOW = time.strftime("%Y_%m_%d_%Hh%Mm%Ss")
+COL_NAMES = [
+    "ECalBarrelCollection",
+    "ECalEndcapCollection",
+]
 INNER_RADIUS = 310.0
 OUTER_RADIUS = 2200
 PARTICLE_RADIUS = 100.0
@@ -38,6 +43,7 @@ def main():
     )
     ops = options()
     plotter = LayerPlotter(expand(ops.i), ops.o, int(ops.l))
+    plotter.load_data()
     plotter.plot()
 
 
@@ -62,35 +68,92 @@ class LayerPlotter:
         self.filenames = filenames
         self.layer = layer
         self.pdfname = pdfname
+        self.df = pd.DataFrame()
+        assert len(self.filenames) > 0, "No files found"
+
+
+    def load_data(self) -> None:
+        if self.filenames[0].endswith(".parquet"):
+            if len(self.filenames) == 1:
+                self.df = pd.read_parquet(self.filenames[0])
+            else:
+                self.df = pd.concat([pd.read_parquet(f) for f in self.filenames])
+        else:
+            self.df = pd.concat([EventDecoder(event).data for event in self.read()])
+            self.df["hit_phi"] = np.arctan2(self.df["hit_y"], self.df["hit_x"])
+            self.save_data()
+
+
+    def save_data(self) -> None:
+        self.df.to_parquet(f"rotated_calo.{NOW}.parquet")
+
 
     def read(self) -> pyLCIO.EVENT.LCEvent:
         for filename in tqdm(self.filenames):
             reader = pyLCIO.IOIMPL.LCFactory.getInstance().createLCReader()
-            reader.setReadCollectionNames([COL_NAME])
+            reader.setReadCollectionNames(COL_NAMES)
             reader.open(filename)
             for event in reader:
                 yield event
             reader.close()
 
+
     def plot(self) -> None:
         logger.info("Plotting ... ")
         with PdfPages(self.pdfname) as pdf:
-            for event in self.read():
-                df = EventDecoder(event).data
-                # self.plot_layer(df, pdf, one_event=True)
-                break
+            # for event in self.read():
+            #     df = EventDecoder(event).data
+            #     self.plot_layer_endcap(df, pdf, one_event=True)
+            #     break
             self.plot_all_events(pdf)
+
 
     def plot_all_events(self, pdf: PdfPages) -> None:
         logger.info("Plotting all events overlaid ... ")
-        df = pd.concat([EventDecoder(event).data for event in self.read()])
-        # self.plot_layer(df, pdf, one_event=False)
-        self.plot_inner_radius(df, pdf)
+        self.plot_layer_barrel(self.df, pdf)
+        # self.plot_layer_endcap(self.df, pdf, one_event=False)
+        self.plot_inner_radius(self.df, pdf)
 
-    def plot_layer(self, df: pd.DataFrame, pdf: PdfPages, one_event: bool) -> None:
-        logger.info(f"Plotting df with {len(df)} hits ... ")
-        layer = df[
+
+    def plot_layer_barrel(self, df: pd.DataFrame, pdf: PdfPages) -> None:
+        logger.info(f"Plotting barrel, df with {len(df)} hits ... ")
+        subset = df[
+            # (df["hit_layer"] >= 0)
             (df["hit_layer"] == self.layer)
+            & (df["hit_system"] == systems.ecal_barrel)
+            #& (df["hit_phi"] > 0*np.pi/16)
+            #& (df["hit_phi"] < 4*np.pi/16)
+            #& (df["hit_z"] > 0)
+            #& (df["hit_z"] < 1000)
+        ]
+        fig, ax = plt.subplots(figsize=(4, 4))
+        subset = subset[["hit_x", "hit_y"]].drop_duplicates()
+        ax.scatter(subset["hit_x"], subset["hit_y"], s=1, linewidth=0)
+        ax.set_xlabel("x [mm]")
+        ax.set_ylabel("y [mm]")
+        #ax.scatter(subset["hit_phi"], subset["hit_z"], s=5, linewidth=0)
+        #ax.set_xlabel("phi [rad]")
+        #ax.set_ylabel("z [mm]")
+        ax.grid(linewidth=0.1)
+        ax.set_axisbelow(True)
+        ax.tick_params(top=True, right=True)
+        ax.set_title(f"Layer {self.layer}")
+        # ax.set_xlim([-OUTER_RADIUS, OUTER_RADIUS])
+        # ax.set_ylim([-OUTER_RADIUS, OUTER_RADIUS])
+        # add circles
+        # circle1 = plt.Circle((0, 0), INNER_RADIUS, color="black", fill=False)
+        # circle2 = plt.Circle((0, 0), OUTER_RADIUS, color="black", fill=False)
+        # ax.add_artist(circle1)
+        # ax.add_artist(circle2)
+        fig.subplots_adjust(bottom=0.12, left=0.21, right=0.95, top=0.93)
+        pdf.savefig(fig)
+        plt.close(fig)
+
+
+    def plot_layer_endcap(self, df: pd.DataFrame, pdf: PdfPages, one_event: bool) -> None:
+        logger.info(f"Plotting endcap, df with {len(df)} hits ... ")
+        layer = df[
+            (df["hit_layer"] >= self.layer)
             & (df["hit_system"] == systems.ecal_endcap)
             & (df["hit_side"] == 1)
         ]
@@ -160,18 +223,21 @@ class EventDecoder:
     def __init__(self, event: pyLCIO.EVENT.LCEvent) -> None:
         d = self.default_dict()
         event_number = event.getEventNumber()
-        col = event.getCollection(COL_NAME)
-        for hit in col:
-            id0 = hit.getCellID0()
-            position = hit.getPosition()
-            d["event"].append(event_number)
-            d["hit_x"].append(position[0])
-            d["hit_y"].append(position[1])
-            d["hit_z"].append(position[2])
-            d["hit_e"].append(hit.getEnergy())
-            d["hit_system"].append(id0 & self.mask(5))
-            d["hit_side"].append((id0 >> 5) & self.mask(2))
-            d["hit_layer"].append((id0 >> 19) & self.mask(9))
+        for COL_NAME in COL_NAMES:
+            if not COL_NAME in event.getCollectionNames():
+                continue
+            col = event.getCollection(COL_NAME)
+            for hit in col:
+                id0 = hit.getCellID0()
+                position = hit.getPosition()
+                d["event"].append(event_number)
+                d["hit_x"].append(position[0])
+                d["hit_y"].append(position[1])
+                d["hit_z"].append(position[2])
+                d["hit_e"].append(hit.getEnergy())
+                d["hit_system"].append(id0 & self.mask(5))
+                d["hit_side"].append((id0 >> 5) & self.mask(2))
+                d["hit_layer"].append((id0 >> 19) & self.mask(9))
         self.data = pd.DataFrame(d)
         # logger.info(f"Event {event_number} has {len(self.data)} hits")
 
