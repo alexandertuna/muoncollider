@@ -23,7 +23,12 @@ def expand(input: str) -> List[str]:
 
 
 def get_df(filename: str) -> pd.DataFrame:
-    return pd.concat([pd.read_parquet(f) for f in expand(filename)], ignore_index=True)
+    return pd.concat([annotate_df(pd.read_parquet(fi), it) for it, fi in enumerate(expand(filename))], ignore_index=True)
+
+
+def annotate_df(df: pd.DataFrame, file_number: int) -> pd.DataFrame:
+    df["file"] = file_number
+    return df
 
 
 if __name__ == "__main__":
