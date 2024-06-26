@@ -3,6 +3,7 @@ import glob
 import pandas as pd
 from typing import List
 
+
 def main():
     ops = options()
     print(f"Opening {ops.input}")
@@ -23,7 +24,13 @@ def expand(input: str) -> List[str]:
 
 
 def get_df(filename: str) -> pd.DataFrame:
-    return pd.concat([annotate_df(pd.read_parquet(fi), it) for it, fi in enumerate(expand(filename))], ignore_index=True)
+    return pd.concat(
+        [
+            annotate_df(pd.read_parquet(fi), it)
+            for it, fi in enumerate(expand(filename))
+        ],
+        ignore_index=True,
+    )
 
 
 def annotate_df(df: pd.DataFrame, file_number: int) -> pd.DataFrame:
@@ -33,4 +40,3 @@ def annotate_df(df: pd.DataFrame, file_number: int) -> pd.DataFrame:
 
 if __name__ == "__main__":
     main()
-
