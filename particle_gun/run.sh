@@ -14,7 +14,7 @@ NOW=$(date +%Y_%m_%d_%Hh%Mm%Ss)
 
 CODE="/code"
 TMP="/tmp/tuna/${NOW}"
-DATA="/work/tuna/data"
+DATA="/scratch/tuna/data"
 
 GEN=${DATA}/${PARTICLE}/${PARTICLE}_gen_${NOW}.slcio
 SIM=${DATA}/${PARTICLE}/${PARTICLE}_sim_${NOW}.slcio
