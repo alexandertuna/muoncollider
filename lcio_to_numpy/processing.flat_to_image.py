@@ -34,7 +34,7 @@ def main() -> None:
         filemode="w",
         level=logging.DEBUG,
     )
-    processor = ProcessFlatToImage(ops.i, ops.o)
+    processor = ProcessFlatToImage(ops.i, ops.o, ops.npy, ops.npz)
     processor.load_data()
     processor.make_new_columns()
     processor.make_label_array()
@@ -47,7 +47,7 @@ def main() -> None:
 
 class ProcessFlatToImage:
 
-    def __init__(self, input: str, output: str) -> None:
+    def __init__(self, input: str, output: str, npy: bool, npz: bool) -> None:
         self.input = input
         self.output = output
         if not os.path.isfile(self.input):
@@ -56,6 +56,10 @@ class ProcessFlatToImage:
         self.features = np.array([])
         self.labels = np.array([])
         self.shape = (img.pixels, img.pixels)
+        self.npy = npy
+        self.npz = npz
+        if not self.npy and not self.npz:
+            raise Exception("Should save either --npy or --npz files")
 
     def load_data(self) -> None:
         logger.info("Loading dataframe ... ")
@@ -80,7 +84,8 @@ class ProcessFlatToImage:
     def make_label_array(self) -> None:
         """Group the rows by event, and pluck the truth energy of that event"""
         logger.info("Making label array ... ")
-        self.labels = self.df.groupby("event").first().truth_e
+        # self.labels = self.df.groupby("event").first().truth_e
+        self.labels = self.df.groupby("event").first().truth_pdgid
 
     def make_image_array(self) -> None:
         """NB: this is only implemented for ecal currently"""
@@ -109,13 +114,15 @@ class ProcessFlatToImage:
             self.features[event, layer] = process_group(group)
 
     def write_data(self) -> None:
-        logger.info("Writing npz file ... ")
-        np.savez_compressed(
-            self.output + ".npz", features=self.features, labels=self.labels
-        )
-        # logger.info("Writing npy files ... ")
-        # np.save(self.output + ".features.npy", self.features)
-        # np.save(self.output + ".labels.npy", self.labels)
+        if self.npy:
+            logger.info("Writing npy files ... ")
+            np.save(self.output + ".features.npy", self.features)
+            np.save(self.output + ".labels.npy", self.labels)
+        if self.npz:
+            logger.info("Writing npz file ... ")
+            np.savez_compressed(
+                self.output + ".npz", features=self.features, labels=self.labels
+            )
 
     def make_diagnostic_plots(self, events: int) -> None:
         logger.info("Making diagnostic plots ... ")
@@ -214,6 +221,8 @@ def options() -> argparse.ArgumentParser:
     parser.add_argument("-i", help="Input parquet file", required=True)
     parser.add_argument("-o", help="Basename for output files", default="data")
     parser.add_argument("-d", help="Debug by making plots", action="store_true")
+    parser.add_argument("--npy", help="Save .npy files", action="store_true")
+    parser.add_argument("--npz", help="Save .npz files", action="store_true")
     return parser.parse_args()
 
 
