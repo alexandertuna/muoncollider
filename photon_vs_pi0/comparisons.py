@@ -1,8 +1,11 @@
 import argparse
+import glob
 import numpy as np
+import scipy as sp
 import pandas as pd
 from tqdm import tqdm
 from dataclasses import dataclass
+from typing import List
 
 import matplotlib as mpl
 
@@ -33,24 +36,41 @@ class ComparisonPlots:
         self.photon_file = photon_file
         self.pizero_file = pizero_file
         self.output_file = output_file
-        self.photon_df = pd.read_parquet(photon_file)
-        self.pizero_df = pd.read_parquet(pizero_file)
-        self.photon_df["hit_r"] = np.sqrt(self.photon_df["hit_x"] ** 2 + self.photon_df["hit_y"] ** 2)
-        self.pizero_df["hit_r"] = np.sqrt(self.pizero_df["hit_x"] ** 2 + self.pizero_df["hit_y"] ** 2)
+        self.photon_df = self.get_df(photon_file)
+        self.pizero_df = self.get_df(pizero_file)
+        for df in [
+            self.photon_df,
+            self.pizero_df,
+        ]:
+            df["hit_r"] = np.sqrt(df["hit_x"] ** 2 + df["hit_y"] ** 2)
+            df["hit_ex"] = df["hit_e"] * df["hit_x"]
+            df["hit_ey"] = df["hit_e"] * df["hit_y"]
+            df["hit_er"] = df["hit_e"] * df["hit_r"]
+
+    def get_df(self, filename: str) -> pd.DataFrame:
+        print(f"Reading {filename} ... ")
+        def expand(input: str) -> List[str]:
+            return [f for path in input.split(",") for f in glob.glob(path)]
+        fnames = expand(filename)
+        if len(fnames) == 1:
+            return pd.read_parquet(fnames[0])
+        return pd.concat([pd.read_parquet(f) for f in fnames])
 
     def plot(self) -> None:
         with PdfPages(self.output_file) as pdf:
-            self.plot_radial_variance(pdf)
+            self.plot_radial_std(pdf)
 
-    def plot_radial_variance(self, pdf: PdfPages) -> None:
-        fig, ax = plt.subplots()
-        ax.hist(self.photon_df["hit_r"], label="Photon", color="blue")
-        ax.hist(self.pizero_df["hit_r"], label="Pizero", color="green")
-        ax.set_xlabel("r [mm]")
-        ax.set_ylabel("Counts")
-        ax.legend()
-        pdf.savefig(fig)
-        plt.close(fig)
+    def plot_radial_std(self, pdf: PdfPages) -> None:
+        for coord in ["x", "y", "r", "ex", "ey", "er"]:
+            fig, ax = plt.subplots()
+            bins = np.linspace(-20, 60, 100)
+            ax.hist(self.photon_df.groupby("event")[f"hit_{coord}"].std(), histtype="step", label="Photon", bins=bins, color="blue")
+            ax.hist(self.pizero_df.groupby("event")[f"hit_{coord}"].std(), histtype="step", label="Pizero", bins=bins, color="green")
+            ax.set_xlabel(f"{coord} [mm]")
+            ax.set_ylabel("Counts")
+            ax.legend()
+            pdf.savefig(fig)
+            plt.close(fig)
 
     def plot_event(self, event: int, group: pd.DataFrame, pdf: PdfPages) -> None:
         nrows, ncols = NLAYERS // NCOLS_PER_ROW, NCOLS_PER_ROW
