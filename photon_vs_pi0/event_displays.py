@@ -56,7 +56,8 @@ class EventDisplays:
             figsize=(4.5 * ncols, 4 * nrows), nrows=nrows, ncols=ncols
         )
         for i, (layer, layer_group) in enumerate(group.groupby("hit_layer")):
-            energy = np.log10(layer_group["hit_e"] + 1e-6)
+            # energy = np.log10(layer_group["hit_e"] + 1e-6)
+            energy = layer_group["hit_e"]
             i_ax = i // ncols, i % ncols
             scat = ax[i_ax].scatter(
                 x=layer_group["hit_x"],
@@ -65,6 +66,8 @@ class EventDisplays:
                 vmin=plotting.vmin,
                 vmax=plotting.vmax,
                 cmap=plotting.cmap,
+                # edgecolor="gray",
+                # linewidth=0.01,
             )
             self.stylize(ax[i_ax], event, layer)
             fig.colorbar(scat, ax=ax[i_ax])
@@ -88,7 +91,8 @@ class EventDisplays:
             f"{particle.name[self.pdgid]}, Event {event}, Layer {layer}",
             transform=ax.transAxes,
         )
-        ax.text(0.956, 1.02, f"E [log(GeV)]", transform=ax.transAxes)
+        # ax.text(0.956, 1.02, f"E [log(GeV)]", transform=ax.transAxes)
+        ax.text(0.956, 1.02, f"E [GeV]", transform=ax.transAxes)
 
 
 @dataclass(frozen=True)
@@ -101,7 +105,8 @@ class particle:
 
 @dataclass(frozen=True)
 class plotting:
-    vmin, vmax = -3, -0.01
+    # vmin, vmax = -3, -0.01
+    vmin, vmax = -0.2, 3
     cmap = "gist_heat_r"
 
 
