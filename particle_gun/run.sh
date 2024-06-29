@@ -33,13 +33,11 @@ sed -i "s/TYPEEVENT/${PARTICLE}/g" ${STEER} || return
 echo "pgun"
 time python ${CODE}/mucoll-benchmarks/generation/pgun/pgun_lcio.py -o -e ${EVENTS} -p 1 --pdg ${PDGID} --p ${ENERGY} --theta ${THETA} --phi ${PHI} -- ${GEN} || return
 
+echo "ddsim"
 time ddsim --steeringFile ${CODE}/mucoll-benchmarks/simulation/ilcsoft/steer_baseline.py --inputFile ${GEN} --outputFile ${SIM} || return
-# time ddsim --inputFile ${GEN} --steeringFile /code/SteeringMacros/Sim/sim_steer_GEN_CONDOR.py --outputFile ${SIM}
 
+echo "k4run"
 time k4run ${STEER} # || return
-# https://github.com/key4hep/k4FWCore/issues/125
-# time k4run ${CODE}/SteeringMacros/k4Reco/steer_reco_CONDOR.py || return
-# time Marlin --global.LCIOInputFiles=${SIM} --DD4hep.DD4hepXMLFile=${MUCOLL_GEO} ../mucoll-benchmarks/digitisation/marlin/digi_steer.xml
 
-echo "rm -f ${SIM}"
-rm -f ${SIM}
+# echo "rm -f ${SIM}"
+# rm -f ${SIM}
