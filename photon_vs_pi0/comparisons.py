@@ -1,9 +1,7 @@
 import argparse
 import glob
 import numpy as np
-import scipy as sp
 import pandas as pd
-from tqdm import tqdm
 from dataclasses import dataclass
 from typing import List
 
@@ -14,12 +12,18 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
 import logging
-
 logging.basicConfig(level=logging.INFO)
+
+PHOTON = 0
+PIZERO = 1
+PARTICLES = [
+    PHOTON,
+    PIZERO,
+]
 
 def main():
     ops = options()
-    comp = ComparisonPlots(ops.photon, ops.pizero, ops.output)
+    comp = ComparisonPlots2(ops.photon, ops.pizero, ops.output)
     comp.plot()
 
 
@@ -29,6 +33,125 @@ def options():
     parser.add_argument("--pizero", help="Input file (pizeros)", required=True)
     parser.add_argument("-o", "--output", help="Output file", required=True)
     return parser.parse_args()
+
+
+class ComparisonPlots2:
+    def __init__(self, photon_glob: str, pizero_glob, output_file: str) -> None:
+        self.files = {
+            PHOTON: glob.glob(photon_glob),
+            PIZERO: glob.glob(pizero_glob),
+        }
+        self.features = {
+            PHOTON: np.concatenate([np.load(fname) for fname in self.files[PHOTON]]),
+            PIZERO: np.concatenate([np.load(fname) for fname in self.files[PIZERO]]),
+        }
+        self.photon_files = glob.glob(photon_glob)
+        self.pizero_files = glob.glob(pizero_glob)
+        self.output_file = output_file
+        self.photon_features = np.concatenate([np.load(fname) for fname in self.photon_files])
+        self.pizero_features = np.concatenate([np.load(fname) for fname in self.pizero_files])
+        print(self.photon_features.shape)
+        print(self.pizero_features.shape)
+        _, z, x, y = self.photon_features.shape
+        self.x_all = slice(0, x)
+        self.y_all = slice(0, y)
+        self.z_all = slice(0, z)
+        self.make_new_features()
+
+    def calculate_ratios(
+        self,
+        images: np.ndarray,
+        slice_numer_x: slice = None,
+        slice_numer_y: slice = None,
+        slice_numer_z: slice = None,
+        slice_denom_x: slice = None,
+        slice_denom_y: slice = None,
+        slice_denom_z: slice = None,
+    ):
+        slices_numer = (
+            slice(None),
+            slice_numer_z or self.z_all,
+            slice_numer_x or self.x_all,
+            slice_numer_y or self.y_all,
+        )
+        slices_denom = (
+            slice(None),
+            slice_denom_z or self.z_all,
+            slice_denom_x or self.x_all,
+            slice_denom_y or self.y_all,
+        )
+        numer = np.sum(images[slices_numer], axis=(1, 2, 3))
+        denom = np.sum(images[slices_denom], axis=(1, 2, 3))
+        return numer / denom
+
+    def make_new_features(self) -> None:
+        self.make_feature_ratio_x()
+        self.make_feature_r_y()
+        self.make_feature_r_front()
+        self.make_feature_r_back()
+        self.make_feature_w_x()
+        self.make_feature_w_y()
+        self.make_feature_w_x_max()
+        self.make_feature_w_y_max()
+        self.make_feature_d_e()
+        self.make_feature_r_e()
+
+    def make_feature_ratio_x(self) -> None:
+        self.ratio_x0208_y0808 = {}
+        self.ratio_x0824_y0808 = {}
+        for PARTICLE in PARTICLES:
+            self.ratio_x0208_y0808[PARTICLE] = self.calculate_ratios(
+                self.features[PARTICLE],
+                slice_numer_x=slice(19, 21),
+                slice_denom_x=slice(16, 24),
+                slice_numer_y=slice(16, 24),
+                slice_denom_y=slice(16, 24),
+            )
+            self.ratio_x0824_y0808[PARTICLE] = self.calculate_ratios(
+                self.features[PARTICLE],
+                slice_numer_x=slice(16, 24),
+                slice_denom_x=slice( 8, 32),
+                slice_numer_y=slice(16, 24),
+                slice_denom_y=slice(16, 24),
+            )
+
+    def make_feature_r_y(self) -> None:
+        pass
+
+    def make_feature_r_front(self) -> None:
+        pass
+
+    def make_feature_r_back(self) -> None:
+        pass
+
+    def make_feature_w_x(self) -> None:
+        pass
+
+    def make_feature_w_y(self) -> None:
+        pass
+
+    def make_feature_w_x_max(self) -> None:
+        pass
+
+    def make_feature_w_y_max(self) -> None:
+        pass
+
+    def make_feature_d_e(self) -> None:
+        pass
+
+    def make_feature_r_e(self) -> None:
+        pass
+
+
+    def plot(self) -> None:
+        fig, ax = plt.subplots(figsize=(4, 4), constrained_layout=True)
+        bins = np.linspace(0.0, 1.0, 101)
+        ax.hist(self.ratio_x0208_y0808[PIZERO], bins=bins, histtype="stepfilled", alpha=0.75, edgecolor="black", color="red", label="Pi0")
+        ax.hist(self.ratio_x0208_y0808[PHOTON], bins=bins, histtype="stepfilled", alpha=0.75, edgecolor="black", color="blue", label="Photon")
+        ax.legend()
+        plt.savefig(self.output_file)
+
+
 
 
 class ComparisonPlots:
