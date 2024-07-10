@@ -74,12 +74,12 @@ class ProcessFlatToImage:
         cell = np.vectorize(cell_size)(self.df.hit_system)
         sub_x = self.df.hit_z * np.tan(THETA)
         sub_y = self.df.hit_z * 0.0
-        self.df["hit_xp"] = np.rint(self.df.hit_x / cell)
-        self.df["hit_yp"] = np.rint(self.df.hit_y / cell)
-        self.df["hit_xpp"] = np.rint((self.df.hit_x - sub_x) / cell)
-        self.df["hit_ypp"] = np.rint((self.df.hit_y - sub_y) / cell)
-        self.df["hit_xppp"] = np.rint((self.df.hit_x - sub_x) / cell + img.pixels // 2)
-        self.df["hit_yppp"] = np.rint((self.df.hit_y - sub_y) / cell + img.pixels // 2)
+        self.df["hit_xp1"] = np.rint(self.df.hit_x / cell)
+        self.df["hit_yp1"] = np.rint(self.df.hit_y / cell)
+        self.df["hit_xp2"] = np.rint((self.df.hit_x - sub_x) / cell)
+        self.df["hit_yp2"] = np.rint((self.df.hit_y - sub_y) / cell)
+        self.df["hit_xp3"] = np.rint((self.df.hit_x - sub_x) / cell + img.pixels // 2)
+        self.df["hit_yp3"] = np.rint((self.df.hit_y - sub_y) / cell + img.pixels // 2)
 
     def make_label_array(self) -> None:
         """Group the rows by event, and pluck the truth energy of that event"""
@@ -96,15 +96,15 @@ class ProcessFlatToImage:
                 (self.df.hit_system == systems.ecal_barrel)
                 | (self.df.hit_system == systems.ecal_endcap)
             )
-            & (self.df.hit_xppp >= 0)
-            & (self.df.hit_yppp >= 0)
-            & (self.df.hit_xppp < img.pixels)
-            & (self.df.hit_yppp < img.pixels)
+            & (self.df.hit_xp3 >= 0)
+            & (self.df.hit_yp3 >= 0)
+            & (self.df.hit_xp3 < img.pixels)
+            & (self.df.hit_yp3 < img.pixels)
         ]
 
         def process_group(group):
             coo = coo_matrix(
-                (group["hit_e"], (group["hit_yppp"], group["hit_xppp"])),
+                (group["hit_e"], (group["hit_yp3"], group["hit_xp3"])),
                 shape=self.shape,
             )
             return coo.toarray()
@@ -284,9 +284,9 @@ class plotting:
     ]
     cols = [
         ("hit_x", "hit_y"),
-        ("hit_xp", "hit_yp"),
-        ("hit_xpp", "hit_ypp"),
-        ("hit_xppp", "hit_yppp"),
+        ("hit_xp1", "hit_yp1"),
+        ("hit_xp2", "hit_yp2"),
+        ("hit_xp3", "hit_yp3"),
     ]
     vmin, vmax = 0, 3
     cmap = "gist_heat_r"
