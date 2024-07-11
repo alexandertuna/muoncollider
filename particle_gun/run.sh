@@ -1,14 +1,14 @@
 EVENTS="1000"
-PARTICLE="pi0"
-PDGID="111"
-# PARTICLE="photon"
-# PDGID="22"
+# PARTICLE="pi0"
+# PDGID="111"
+PARTICLE="photon"
+PDGID="22"
 # PARTICLE="neutron"
 # PDGID="2112"
 # ENERGY="50 500"
 ENERGY="100"
 THETA=20
-PHI=0
+PHI="-15"
 
 NOW=$(date +%Y_%m_%d_%Hh%Mm%Ss)
 
@@ -39,5 +39,5 @@ time ddsim --steeringFile ${CODE}/mucoll-benchmarks/simulation/ilcsoft/steer_bas
 echo "k4run"
 time k4run ${STEER} # || return
 
-# echo "rm -f ${SIM}"
-# rm -f ${SIM}
+echo "rm -f ${SIM}"
+rm -f ${SIM}
