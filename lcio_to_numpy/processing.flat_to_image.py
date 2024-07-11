@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
 
 THETA = math.radians(20.0)
-
+DETECTOR_ROTATION = math.radians(-15)
 
 def main() -> None:
     ops = options()
@@ -74,12 +74,14 @@ class ProcessFlatToImage:
         cell = np.vectorize(cell_size)(self.df.hit_system)
         sub_x = self.df.hit_z * np.tan(THETA)
         sub_y = self.df.hit_z * 0.0
-        self.df["hit_xp1"] = np.rint(self.df.hit_x / cell)
-        self.df["hit_yp1"] = np.rint(self.df.hit_y / cell)
-        self.df["hit_xp2"] = np.rint((self.df.hit_x - sub_x) / cell)
-        self.df["hit_yp2"] = np.rint((self.df.hit_y - sub_y) / cell)
-        self.df["hit_xp3"] = np.rint((self.df.hit_x - sub_x) / cell + img.pixels // 2)
-        self.df["hit_yp3"] = np.rint((self.df.hit_y - sub_y) / cell + img.pixels // 2)
+        self.df["hit_xp0"] = np.cos(DETECTOR_ROTATION) * self.df["hit_x"] + np.sin(DETECTOR_ROTATION) * self.df["hit_y"]
+        self.df["hit_yp0"] = -np.sin(DETECTOR_ROTATION) * self.df["hit_x"] + np.cos(DETECTOR_ROTATION) * self.df["hit_y"]
+        self.df["hit_xp1"] = np.rint(self.df.hit_xp0 / cell)
+        self.df["hit_yp1"] = np.rint(self.df.hit_yp0 / cell)
+        self.df["hit_xp2"] = np.rint((self.df.hit_xp0 - sub_x) / cell)
+        self.df["hit_yp2"] = np.rint((self.df.hit_yp0 - sub_y) / cell)
+        self.df["hit_xp3"] = np.rint((self.df.hit_xp0 - sub_x) / cell + img.pixels // 2)
+        self.df["hit_yp3"] = np.rint((self.df.hit_yp0 - sub_y) / cell + img.pixels // 2)
 
     def make_label_array(self) -> None:
         """Group the rows by event, and pluck the truth energy of that event"""
