@@ -1,7 +1,7 @@
 import argparse
 import glob
 import numpy as np
-import pandas as pd
+# import pandas as pd
 from dataclasses import dataclass
 from typing import List
 
@@ -20,6 +20,20 @@ PARTICLES = [
     PHOTON,
     PIZERO,
 ]
+
+PLOTKW = {
+    "histtype": "stepfilled",
+    "edgecolor": "black",
+    "alpha": 0.75,
+}
+PHOTONKW = {
+    "color": "blue",
+    "label": "Photon"
+}
+PIZEROKW = {
+    "color": "red",
+    "label": "Pi0",
+}
 
 def main():
     ops = options()
@@ -45,18 +59,41 @@ class ComparisonPlots2:
             PHOTON: np.concatenate([np.load(fname) for fname in self.files[PHOTON]]),
             PIZERO: np.concatenate([np.load(fname) for fname in self.files[PIZERO]]),
         }
-        self.photon_files = glob.glob(photon_glob)
-        self.pizero_files = glob.glob(pizero_glob)
+        self.derived = {
+            PHOTON: {},
+            PIZERO: {},
+        }
         self.output_file = output_file
-        self.photon_features = np.concatenate([np.load(fname) for fname in self.photon_files])
-        self.pizero_features = np.concatenate([np.load(fname) for fname in self.pizero_files])
-        print(self.photon_features.shape)
-        print(self.pizero_features.shape)
-        _, z, x, y = self.photon_features.shape
+        print("photon:", self.features[PHOTON].shape)
+        print("pizero:", self.features[PIZERO].shape)
+        _, z, x, y = self.features[PHOTON].shape
         self.x_all = slice(0, x)
         self.y_all = slice(0, y)
         self.z_all = slice(0, z)
         self.make_new_features()
+        print("Photon")
+        self.write_to_file()
+
+    def write_to_file(self):
+        print("ffff")
+        np.savez("photon." + self.output_file, **self.derived[PHOTON])
+        np.savez("pizero." + self.output_file, **self.derived[PIZERO])
+#         np.savez(self.output_file,
+#                  ratio_x0208_y0808=self.ratio_x0208_y0808,
+#                  ratio_x0408_y0808=self.ratio_x0408_y0808,
+#                  ratio_x0808_y0208=self.ratio_x0808_y0208,
+#                  ratio_x0808_y0408=self.ratio_x0808_y0408,
+#                  ratio_z10=self.ratio_z10,
+#                  ratio_z20=self.ratio_z20,
+#                  width_x=self.width_x,
+#                  width_y=self.width_y,
+#                  width_about_max_x=self.width_about_max_x,
+#                  width_about_max_y=self.width_about_max_y,
+#                  e_ratio_x=self.e_ratio_x,
+#                  delta_e_x=self.delta_e_x,
+#                  e_ratio_y=self.e_ratio_y,
+#                  delta_e_y=self.delta_e_y,
+#                  )
 
     def calculate_ratios(
         self,
@@ -86,19 +123,15 @@ class ComparisonPlots2:
 
     def make_new_features(self) -> None:
         self.make_feature_ratio_x()
-        self.make_feature_r_y()
-        self.make_feature_r_front()
-        self.make_feature_r_back()
-        self.make_feature_w_x()
-        self.make_feature_w_y()
-        self.make_feature_w_x_max()
-        self.make_feature_w_y_max()
-        self.make_feature_d_e()
-        self.make_feature_r_e()
+        self.make_feature_ratio_y()
+        self.make_feature_ratio_z()
+        self.make_feature_width()
+        self.make_feature_width_about_max()
+        self.make_feature_two_maxima()
 
     def make_feature_ratio_x(self) -> None:
         self.ratio_x0208_y0808 = {}
-        self.ratio_x0824_y0808 = {}
+        self.ratio_x0408_y0808 = {}
         for PARTICLE in PARTICLES:
             self.ratio_x0208_y0808[PARTICLE] = self.calculate_ratios(
                 self.features[PARTICLE],
@@ -107,51 +140,274 @@ class ComparisonPlots2:
                 slice_numer_y=slice(16, 24),
                 slice_denom_y=slice(16, 24),
             )
-            self.ratio_x0824_y0808[PARTICLE] = self.calculate_ratios(
+            self.ratio_x0408_y0808[PARTICLE] = self.calculate_ratios(
                 self.features[PARTICLE],
-                slice_numer_x=slice(16, 24),
-                slice_denom_x=slice( 8, 32),
+                slice_numer_x=slice(18, 22),
+                slice_denom_x=slice(16, 24),
                 slice_numer_y=slice(16, 24),
                 slice_denom_y=slice(16, 24),
             )
 
-    def make_feature_r_y(self) -> None:
-        pass
+    def make_feature_ratio_y(self) -> None:
+        self.ratio_x0808_y0208 = {}
+        self.ratio_x0808_y0408 = {}
+        for PARTICLE in PARTICLES:
+            self.derived[PARTICLE]["ratio_x0808_y0208"] = self.calculate_ratios(
+                self.features[PARTICLE],
+                slice_numer_x=slice(16, 24),
+                slice_denom_x=slice(16, 24),
+                slice_numer_y=slice(19, 21),
+                slice_denom_y=slice(16, 24),
+            )
+            self.derived[PARTICLE]["ratio_x0808_y0408"] = self.calculate_ratios(
+                self.features[PARTICLE],
+                slice_numer_x=slice(16, 24),
+                slice_denom_x=slice(16, 24),
+                slice_numer_y=slice(18, 22),
+                slice_denom_y=slice(16, 24),
+            )
 
-    def make_feature_r_front(self) -> None:
-        pass
+    def make_feature_ratio_z(self) -> None:
+        self.ratio_z10 = {}
+        self.ratio_z20 = {}
+        for PARTICLE in PARTICLES:
+            self.derived[PARTICLE]["ratio_z10"] = self.calculate_ratios(
+                self.features[PARTICLE],
+                slice_numer_z=slice(0, 10),
+            )
+            self.derived[PARTICLE]["ratio_z20"] = self.calculate_ratios(
+                self.features[PARTICLE],
+                slice_numer_z=slice(0, 20),
+            )
 
-    def make_feature_r_back(self) -> None:
-        pass
+    def calculate_width(self, images, axis, slice_x=slice(None), slice_y=slice(None), slice_z=slice(None)) -> None:
+        if axis not in (2, 3):
+            raise ValueError("Axis must be 2 (x-dimension) or 3 (y-dimension)")
+        central_region = images[:, slice_z, slice_x, slice_y]
+        mean_axes = tuple(i for i in range(central_region.ndim) if i != axis and i != 0)
+        img1d = np.sum(central_region, axis=mean_axes)
+        indices = np.arange(img1d.shape[-1])
+        weighted_mean = np.sum(img1d * indices, axis=1) / np.sum(img1d, axis=1)
+        weighted_square = np.sum(img1d * indices * indices, axis=1) / np.sum(img1d, axis=1)
+        width = np.sqrt(weighted_square - weighted_mean**2)
+        return width
 
-    def make_feature_w_x(self) -> None:
-        pass
+    def make_feature_width(self) -> None:
+        self.width_x = {}
+        self.width_y = {}
+        slice_x, slice_y = slice(15, 25), slice(15, 25)
+        for PARTICLE in PARTICLES:
+            self.derived[PARTICLE]["width_x"] = self.calculate_width(self.features[PARTICLE], axis=2, slice_x=slice_x, slice_y=slice_y)
+            self.derived[PARTICLE]["width_y"] = self.calculate_width(self.features[PARTICLE], axis=3, slice_x=slice_x, slice_y=slice_y)
 
-    def make_feature_w_y(self) -> None:
-        pass
 
-    def make_feature_w_x_max(self) -> None:
-        pass
+    def calculate_width_about_max(self,
+                                      images,
+                                      axis,
+                                      slice_x=slice(None),
+                                      slice_y=slice(None),
+                                      slice_z=slice(None),
+                                      ):
+        if axis not in (2, 3):
+            raise ValueError("Axis must be 2 (x-dimension) or 3 (y-dimension)")
+        central_region = images[:, slice_z, slice_x, slice_y]
+        mean_axes = tuple(i for i in range(central_region.ndim) if i != axis and i != 0)
+        img1d = np.sum(central_region, axis=mean_axes)
+        argmaxs = np.argmax(img1d, axis=1)
+        indices = np.arange(img1d.shape[-1])
+        weighted_pos = np.sqrt( (img1d * ((argmaxs[:, np.newaxis] - indices) ** 2)).sum(axis=1) / img1d.sum(axis=1) )
+        return weighted_pos
 
-    def make_feature_w_y_max(self) -> None:
-        pass
+    def make_feature_width_about_max(self) -> None:
+        self.width_about_max_x = {}
+        self.width_about_max_y = {}
+        slice_x, slice_y = slice(15, 25), slice(15, 25)
+        for PARTICLE in PARTICLES:
+            self.derived[PARTICLE]["width_about_max_x"] = self.calculate_width_about_max(self.features[PARTICLE], axis=2, slice_x=slice_x, slice_y=slice_y)
+            self.derived[PARTICLE]["width_about_max_y"] = self.calculate_width_about_max(self.features[PARTICLE], axis=3, slice_x=slice_x, slice_y=slice_y)
 
-    def make_feature_d_e(self) -> None:
-        pass
 
-    def make_feature_r_e(self) -> None:
-        pass
+    def calculate_max_ratio(self, images, axis, slice_x=slice(None), slice_y=slice(None), slice_z=slice(None)):
+        if axis not in (2, 3):
+            raise ValueError("Axis must be 2 (x-dimension) or 3 (y-dimension)")
 
+        central_region = images[:, slice_z, slice_x, slice_y]
+        mean_axes = tuple(i for i in range(central_region.ndim) if i != axis and i != 0)
+        arr = np.sum(central_region, axis=mean_axes)
+
+        # Initialize arrays to store the results for each row
+        max_values = np.max(arr, axis=1)
+        max_indices = np.argmax(arr, axis=1)
+
+        # Create a masked array to find the second max
+        masked_arr = np.ma.masked_array(arr, mask=False)
+        for i, idx in enumerate(max_indices):
+            masked_arr.mask[i, idx] = True
+
+        second_max_values = masked_arr.max(axis=1)
+        second_max_indices = np.argmax(masked_arr, axis=1)
+
+        # Ensure max_indices are less than second_max_indices for each row
+        start_indices = np.minimum(max_indices, second_max_indices)
+        end_indices = np.maximum(max_indices, second_max_indices)
+
+        # Find the minimum values between max and second max for each row
+        # Difficult to vectorize this! Sorry.
+        min_between_max = []
+        for i in range(arr.shape[0]):
+            if end_indices[i] - start_indices[i] > 1:
+                subarray = arr[i, start_indices[i] + 1:end_indices[i]]
+                min_between_max.append(np.min(subarray))
+            else:
+                min_between_max.append(second_max_values[i])
+
+        return (max_values - second_max_values) / (max_values + second_max_values), (second_max_values - min_between_max)
+
+    def make_feature_two_maxima(self) -> None:
+        self.e_ratio_x = {}
+        self.delta_e_x = {}
+        self.e_ratio_y = {}
+        self.delta_e_y = {}
+        for PARTICLE in PARTICLES:
+            self.derived[PARTICLE]["e_ratio_x"], self.derived[PARTICLE]["delta_e_x"] = self.calculate_max_ratio(self.features[PARTICLE], axis=2)
+            self.derived[PARTICLE]["e_ratio_y"], self.derived[PARTICLE]["delta_e_y"] = self.calculate_max_ratio(self.features[PARTICLE], axis=3)
 
     def plot(self) -> None:
+        pass
+#        with PdfPages(self.output_file) as pdf:
+#            self.plot_ratio_x0208_y0808(pdf)
+#            self.plot_ratio_x0408_y0808(pdf)
+#            self.plot_ratio_x0808_y0208(pdf)
+#            self.plot_ratio_x0808_y0408(pdf)
+#            self.plot_ratio_z10(pdf)
+#            self.plot_ratio_z20(pdf)
+#            self.plot_width(pdf)
+#            self.plot_width_about_max(pdf)
+#            self.plot_e_ratio(pdf)
+#            self.plot_delta_e(pdf)
+
+    def plot_ratio_x0208_y0808(self, pdf: PdfPages) -> None:
         fig, ax = plt.subplots(figsize=(4, 4), constrained_layout=True)
-        bins = np.linspace(0.0, 1.0, 101)
+        bins = np.linspace(0.0, 1.01, 102)
         ax.hist(self.ratio_x0208_y0808[PIZERO], bins=bins, histtype="stepfilled", alpha=0.75, edgecolor="black", color="red", label="Pi0")
         ax.hist(self.ratio_x0208_y0808[PHOTON], bins=bins, histtype="stepfilled", alpha=0.75, edgecolor="black", color="blue", label="Photon")
         ax.legend()
-        plt.savefig(self.output_file)
+        ax.set_xlabel("Sum $x_2$,$y_8$ / sum $x_8$,$y_8$")
+        ax.set_ylabel("Number of events")
+        pdf.savefig()
+        plt.close()
 
+    def plot_ratio_x0408_y0808(self, pdf: PdfPages) -> None:
+        fig, ax = plt.subplots(figsize=(4, 4), constrained_layout=True)
+        bins = np.linspace(0.0, 1.01, 102)
+        ax.hist(self.ratio_x0408_y0808[PIZERO], bins=bins, histtype="stepfilled", alpha=0.75, edgecolor="black", color="red", label="Pi0")
+        ax.hist(self.ratio_x0408_y0808[PHOTON], bins=bins, histtype="stepfilled", alpha=0.75, edgecolor="black", color="blue", label="Photon")
+        ax.legend()
+        ax.set_xlabel("Sum $x_4$,$y_8$ / sum $x_8$,$y_8$")
+        ax.set_ylabel("Number of events")
+        pdf.savefig()
+        plt.close()
 
+    def plot_ratio_x0808_y0208(self, pdf: PdfPages) -> None:
+        fig, ax = plt.subplots(figsize=(4, 4), constrained_layout=True)
+        bins = np.linspace(0.0, 1.01, 102)
+        ax.hist(self.ratio_x0808_y0208[PIZERO], bins=bins, histtype="stepfilled", alpha=0.75, edgecolor="black", color="red", label="Pi0")
+        ax.hist(self.ratio_x0808_y0208[PHOTON], bins=bins, histtype="stepfilled", alpha=0.75, edgecolor="black", color="blue", label="Photon")
+        ax.legend()
+        ax.set_xlabel("Sum $x_8$,$y_2$ / sum $x_8$,$y_8$")
+        ax.set_ylabel("Number of events")
+        pdf.savefig()
+        plt.close()
+
+    def plot_ratio_x0808_y0408(self, pdf: PdfPages) -> None:
+        fig, ax = plt.subplots(figsize=(4, 4), constrained_layout=True)
+        bins = np.linspace(0.0, 1.01, 102)
+        ax.hist(self.ratio_x0808_y0408[PIZERO], bins=bins, histtype="stepfilled", alpha=0.75, edgecolor="black", color="red", label="Pi0")
+        ax.hist(self.ratio_x0808_y0408[PHOTON], bins=bins, histtype="stepfilled", alpha=0.75, edgecolor="black", color="blue", label="Photon")
+        ax.legend()
+        ax.set_xlabel("Sum $x_8$,$y_4$ / sum $x_8$,$y_8$")
+        ax.set_ylabel("Number of events")
+        pdf.savefig()
+        plt.close()
+
+    def plot_ratio_z10(self, pdf: PdfPages) -> None:
+        fig, ax = plt.subplots(figsize=(4, 4), constrained_layout=True)
+        bins = np.linspace(0.0, 1.01, 102)
+        ax.hist(self.ratio_z10[PIZERO], bins=bins, histtype="stepfilled", alpha=0.75, edgecolor="black", color="red", label="Pi0")
+        ax.hist(self.ratio_z10[PHOTON], bins=bins, histtype="stepfilled", alpha=0.75, edgecolor="black", color="blue", label="Photon")
+        ax.legend()
+        ax.set_xlabel("Sum $z_{10}$ / sum $z_{all}$")
+        ax.set_ylabel("Number of events")
+        pdf.savefig()
+        plt.close()
+
+    def plot_ratio_z20(self, pdf: PdfPages) -> None:
+        fig, ax = plt.subplots(figsize=(4, 4), constrained_layout=True)
+        bins = np.linspace(0.0, 1.01, 102)
+        ax.hist(self.ratio_z20[PIZERO], bins=bins, histtype="stepfilled", alpha=0.75, edgecolor="black", color="red", label="Pi0")
+        ax.hist(self.ratio_z20[PHOTON], bins=bins, histtype="stepfilled", alpha=0.75, edgecolor="black", color="blue", label="Photon")
+        ax.legend()
+        ax.set_xlabel("Sum $z_{20}$ / sum $z_{all}$")
+        ax.set_ylabel("Number of events")
+        pdf.savefig()
+        plt.close()
+
+    def plot_width(self, pdf: PdfPages) -> None:
+        labels = ["$x$-width", "$y$-width"]
+        widths = [self.width_x, self.width_y]
+        for width, label in zip(widths, labels):
+            fig, ax = plt.subplots(figsize=(4, 4), constrained_layout=True)
+            bins = np.linspace(0.5, 3.5, 100)
+            ax.hist(width[PIZERO], bins=bins, **PIZEROKW, **PLOTKW)
+            ax.hist(width[PHOTON], bins=bins, **PHOTONKW, **PLOTKW)
+            ax.legend()
+            ax.set_xlabel(label)
+            ax.set_ylabel("Number of events")
+            pdf.savefig()
+            plt.close()
+
+    def plot_width_about_max(self, pdf: PdfPages) -> None:
+        labels = ["$x$-width about maximum", "$y$-width about maximum"]
+        widths = [self.width_about_max_x, self.width_about_max_y]
+        for width, label in zip(widths, labels):
+            fig, ax = plt.subplots(figsize=(4, 4), constrained_layout=True)
+            bins = np.linspace(0.5, 3.5, 100)
+            ax.hist(width[PIZERO], bins=bins, **PIZEROKW, **PLOTKW)
+            ax.hist(width[PHOTON], bins=bins, **PHOTONKW, **PLOTKW)
+            ax.legend()
+            ax.set_xlabel(label)
+            ax.set_ylabel("Number of events")
+            pdf.savefig()
+            plt.close()
+
+    def plot_e_ratio(self, pdf: PdfPages) -> None:
+        labels = ["$E$-ratio ($x$)", "$E$-ratio ($y$)"]
+        ratios = [self.e_ratio_x, self.e_ratio_y]
+        for ratio, label in zip(ratios, labels):
+            fig, ax = plt.subplots(figsize=(4, 4), constrained_layout=True)
+            bins = np.linspace(0.0, 1.01, 102)
+            ax.hist(ratio[PIZERO], bins=bins, **PIZEROKW, **PLOTKW)
+            ax.hist(ratio[PHOTON], bins=bins, **PHOTONKW, **PLOTKW)
+            ax.legend()
+            ax.set_xlabel(label)
+            ax.set_ylabel("Number of events")
+            pdf.savefig()
+            plt.close()
+
+    def plot_delta_e(self, pdf: PdfPages) -> None:
+        labels = ["delta-$E$ ($x$)", "delta-$E$ ($y$)"]
+        deltas = [self.delta_e_x, self.delta_e_y]
+        for delta, label in zip(deltas, labels):
+            fig, ax = plt.subplots(figsize=(4, 4), constrained_layout=True)
+            bins = np.linspace(0.0, 30.0, 100)
+            ax.hist(delta[PIZERO], bins=bins, **PIZEROKW, **PLOTKW)
+            ax.hist(delta[PHOTON], bins=bins, **PHOTONKW, **PLOTKW)
+            ax.legend()
+            ax.set_xlabel(label)
+            ax.set_ylabel("Number of events")
+            ax.semilogy()
+            pdf.savefig()
+            plt.close()
 
 
 class ComparisonPlots:
@@ -170,7 +426,7 @@ class ComparisonPlots:
             df["hit_ey"] = df["hit_e"] * df["hit_y"]
             df["hit_er"] = df["hit_e"] * df["hit_r"]
 
-    def get_df(self, filename: str) -> pd.DataFrame:
+    def get_df(self, filename: str):
         print(f"Reading {filename} ... ")
         def expand(input: str) -> List[str]:
             return [f for path in input.split(",") for f in glob.glob(path)]
@@ -195,7 +451,7 @@ class ComparisonPlots:
             pdf.savefig(fig)
             plt.close(fig)
 
-    def plot_event(self, event: int, group: pd.DataFrame, pdf: PdfPages) -> None:
+    def plot_event(self, event: int, group, pdf: PdfPages) -> None:
         nrows, ncols = NLAYERS // NCOLS_PER_ROW, NCOLS_PER_ROW
         fig, ax = plt.subplots(
             figsize=(4.5 * ncols, 4 * nrows), nrows=nrows, ncols=ncols
