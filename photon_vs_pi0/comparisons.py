@@ -71,8 +71,7 @@ class ComparisonPlots2:
         self.y_all = slice(0, y)
         self.z_all = slice(0, z)
         self.make_new_features()
-        print("Photon")
-        self.write_to_file()
+        # self.write_to_file()
 
     def write_to_file(self):
         print("ffff")
@@ -130,17 +129,15 @@ class ComparisonPlots2:
         self.make_feature_two_maxima()
 
     def make_feature_ratio_x(self) -> None:
-        self.ratio_x0208_y0808 = {}
-        self.ratio_x0408_y0808 = {}
         for PARTICLE in PARTICLES:
-            self.ratio_x0208_y0808[PARTICLE] = self.calculate_ratios(
+            self.derived[PARTICLE]["ratio_x0208_y0808"] = self.calculate_ratios(
                 self.features[PARTICLE],
                 slice_numer_x=slice(19, 21),
                 slice_denom_x=slice(16, 24),
                 slice_numer_y=slice(16, 24),
                 slice_denom_y=slice(16, 24),
             )
-            self.ratio_x0408_y0808[PARTICLE] = self.calculate_ratios(
+            self.derived[PARTICLE]["ratio_x0408_y0808"] = self.calculate_ratios(
                 self.features[PARTICLE],
                 slice_numer_x=slice(18, 22),
                 slice_denom_x=slice(16, 24),
@@ -149,8 +146,6 @@ class ComparisonPlots2:
             )
 
     def make_feature_ratio_y(self) -> None:
-        self.ratio_x0808_y0208 = {}
-        self.ratio_x0808_y0408 = {}
         for PARTICLE in PARTICLES:
             self.derived[PARTICLE]["ratio_x0808_y0208"] = self.calculate_ratios(
                 self.features[PARTICLE],
@@ -168,8 +163,6 @@ class ComparisonPlots2:
             )
 
     def make_feature_ratio_z(self) -> None:
-        self.ratio_z10 = {}
-        self.ratio_z20 = {}
         for PARTICLE in PARTICLES:
             self.derived[PARTICLE]["ratio_z10"] = self.calculate_ratios(
                 self.features[PARTICLE],
@@ -193,8 +186,6 @@ class ComparisonPlots2:
         return width
 
     def make_feature_width(self) -> None:
-        self.width_x = {}
-        self.width_y = {}
         slice_x, slice_y = slice(15, 25), slice(15, 25)
         for PARTICLE in PARTICLES:
             self.derived[PARTICLE]["width_x"] = self.calculate_width(self.features[PARTICLE], axis=2, slice_x=slice_x, slice_y=slice_y)
@@ -219,8 +210,6 @@ class ComparisonPlots2:
         return weighted_pos
 
     def make_feature_width_about_max(self) -> None:
-        self.width_about_max_x = {}
-        self.width_about_max_y = {}
         slice_x, slice_y = slice(15, 25), slice(15, 25)
         for PARTICLE in PARTICLES:
             self.derived[PARTICLE]["width_about_max_x"] = self.calculate_width_about_max(self.features[PARTICLE], axis=2, slice_x=slice_x, slice_y=slice_y)
@@ -264,18 +253,14 @@ class ComparisonPlots2:
         return (max_values - second_max_values) / (max_values + second_max_values), (second_max_values - min_between_max)
 
     def make_feature_two_maxima(self) -> None:
-        self.e_ratio_x = {}
-        self.delta_e_x = {}
-        self.e_ratio_y = {}
-        self.delta_e_y = {}
         for PARTICLE in PARTICLES:
             self.derived[PARTICLE]["e_ratio_x"], self.derived[PARTICLE]["delta_e_x"] = self.calculate_max_ratio(self.features[PARTICLE], axis=2)
             self.derived[PARTICLE]["e_ratio_y"], self.derived[PARTICLE]["delta_e_y"] = self.calculate_max_ratio(self.features[PARTICLE], axis=3)
 
     def plot(self) -> None:
         pass
-#        with PdfPages(self.output_file) as pdf:
-#            self.plot_ratio_x0208_y0808(pdf)
+        with PdfPages(self.output_file) as pdf:
+            self.plot_ratio_x0208_y0808(pdf)
 #            self.plot_ratio_x0408_y0808(pdf)
 #            self.plot_ratio_x0808_y0208(pdf)
 #            self.plot_ratio_x0808_y0408(pdf)
@@ -289,8 +274,8 @@ class ComparisonPlots2:
     def plot_ratio_x0208_y0808(self, pdf: PdfPages) -> None:
         fig, ax = plt.subplots(figsize=(4, 4), constrained_layout=True)
         bins = np.linspace(0.0, 1.01, 102)
-        ax.hist(self.ratio_x0208_y0808[PIZERO], bins=bins, histtype="stepfilled", alpha=0.75, edgecolor="black", color="red", label="Pi0")
-        ax.hist(self.ratio_x0208_y0808[PHOTON], bins=bins, histtype="stepfilled", alpha=0.75, edgecolor="black", color="blue", label="Photon")
+        ax.hist(self.derived[PIZERO]["ratio_x0208_y0808"], bins=bins, histtype="stepfilled", alpha=0.75, edgecolor="black", color="red", label="Pi0")
+        ax.hist(self.derived[PHOTON]["ratio_x0208_y0808"], bins=bins, histtype="stepfilled", alpha=0.75, edgecolor="black", color="blue", label="Photon")
         ax.legend()
         ax.set_xlabel("Sum $x_2$,$y_8$ / sum $x_8$,$y_8$")
         ax.set_ylabel("Number of events")
