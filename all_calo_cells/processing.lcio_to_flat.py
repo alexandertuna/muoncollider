@@ -66,8 +66,11 @@ class ProcessLcioToFlat:
             col = event.getCollection(colname)
             for hit in col:
                 id0 = hit.getCellID0()
+                id1 = hit.getCellID1()
                 position = hit.getPosition()
                 d["event"].append(event_number)
+                d["hit_cellid0"].append(id0)
+                d["hit_cellid1"].append(id1)
                 d["hit_system"].append(id0 & self.mask(5))
                 d["hit_side"].append((id0 >> 5) & self.mask(2))
                 d["hit_layer"].append((id0 >> 19) & self.mask(9))
@@ -87,6 +90,8 @@ class ProcessLcioToFlat:
     def default_dict(self) -> dict:
         return {
             "event": [],
+            "hit_cellid0": [],
+            "hit_cellid1": [],
             "hit_system": [],
             "hit_side": [],
             "hit_layer": [],
